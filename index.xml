@@ -55,7 +55,7 @@
 &lt;td&gt;Guest&lt;/td&gt;
 &lt;/tr&gt;
 &lt;/tbody&gt;
-&lt;/table&gt;</description></item><item><title>Study of Nonlocal Collisional Kinetic Models and Their Applications to Thick Sprays</title><link>https://zhechenmath-wq.github.io/zhechen-website/publications/thesis/</link><pubDate>Fri, 19 Dec 2025 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/publications/thesis/</guid><description/></item><item><title>Groupe de Travail Modélisation Analyse et Simulation</title><link>https://zhechenmath-wq.github.io/zhechen-website/events/map52025/</link><pubDate>Fri, 19 Sep 2025 11:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/events/map52025/</guid><description>&lt;p&gt;&lt;strong&gt;Title&lt;/strong&gt;: A Formal Derivation of the Thick Spray Model from the Enskog–Boltzmann System&lt;/p&gt;</description></item><item><title>A Formal Derivation of the Thick Spray Model from the Enskog-Boltzmann System</title><link>https://zhechenmath-wq.github.io/zhechen-website/publications/derivation-of-thick-sprays-model/</link><pubDate>Mon, 01 Sep 2025 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/publications/derivation-of-thick-sprays-model/</guid><description/></item><item><title>Conservative Formulations of the Standard Enskog and Povzner Equations</title><link>https://zhechenmath-wq.github.io/zhechen-website/publications/see-and-pe/</link><pubDate>Mon, 01 Sep 2025 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/publications/see-and-pe/</guid><description/></item><item><title>Groupe de Travail des Thésard·es du LJLL</title><link>https://zhechenmath-wq.github.io/zhechen-website/events/gtt/</link><pubDate>Wed, 19 Mar 2025 17:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/events/gtt/</guid><description>&lt;p&gt;&lt;strong&gt;Title&lt;/strong&gt;: Local conservation laws and entropy inequality for Kinetic model with delocalized collision integral&lt;/p&gt;</description></item><item><title>🎉 Easily create your own simple yet highly customizable blog</title><link>https://zhechenmath-wq.github.io/zhechen-website/blog/get-started/</link><pubDate>Fri, 27 Oct 2023 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/blog/get-started/</guid><description>&lt;p&gt;Welcome 👋&lt;/p&gt;
+&lt;/table&gt;</description></item><item><title>Study of Nonlocal Collisional Kinetic Models and Their Applications to Thick Sprays</title><link>https://zhechenmath-wq.github.io/zhechen-website/publications/thesis/</link><pubDate>Fri, 19 Dec 2025 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/publications/thesis/</guid><description/></item><item><title>Groupe de Travail Modélisation Analyse et Simulation</title><link>https://zhechenmath-wq.github.io/zhechen-website/events/map52025/</link><pubDate>Fri, 19 Sep 2025 11:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/events/map52025/</guid><description>&lt;p&gt;&lt;strong&gt;Title&lt;/strong&gt;: A Formal Derivation of the Thick Spray Model from the Enskog–Boltzmann System&lt;/p&gt;</description></item><item><title>A Formal Derivation of the Thick Spray Model from the Enskog-Boltzmann System</title><link>https://zhechenmath-wq.github.io/zhechen-website/publications/derivation-of-thick-sprays-model/</link><pubDate>Mon, 01 Sep 2025 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/publications/derivation-of-thick-sprays-model/</guid><description/></item><item><title>Conservative Formulations of the Standard Enskog and Povzner Equations</title><link>https://zhechenmath-wq.github.io/zhechen-website/publications/see-and-pe/</link><pubDate>Mon, 01 Sep 2025 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/publications/see-and-pe/</guid><description/></item><item><title>Groupe de Travail des Thésard·es du LJLL</title><link>https://zhechenmath-wq.github.io/zhechen-website/events/gtt/</link><pubDate>Wed, 19 Mar 2025 17:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/events/gtt/</guid><description>&lt;p&gt;&lt;strong&gt;Title&lt;/strong&gt;: Local conservation laws and entropy inequality for Kinetic model with delocalized collision integral&lt;/p&gt;</description></item><item><title>Organizer of First-year PhD student research talks</title><link>https://zhechenmath-wq.github.io/zhechen-website/organizations/first-year-phd-research-talks/</link><pubDate>Thu, 23 Nov 2023 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/organizations/first-year-phd-research-talks/</guid><description/></item><item><title>🎉 Easily create your own simple yet highly customizable blog</title><link>https://zhechenmath-wq.github.io/zhechen-website/blog/get-started/</link><pubDate>Fri, 27 Oct 2023 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/blog/get-started/</guid><description>&lt;p&gt;Welcome 👋&lt;/p&gt;
 &lt;details class="print:hidden xl:hidden" open&gt;
 &lt;summary&gt;Table of Contents&lt;/summary&gt;
 &lt;div class="text-sm"&gt;
@@ -551,7 +551,7 @@ Powered by Hugo Blox Builder - https://github.com/HugoBlox/hugo-blox-builder
 format for interactive data visualizations. With Plotly, you can design almost any kind of visualization you can imagine!&lt;/p&gt;
 &lt;p&gt;Save your Plotly JSON in your page folder, for example &lt;code&gt;line-chart.json&lt;/code&gt;, and then add the &lt;code&gt;{{&amp;lt; chart data=&amp;quot;line-chart&amp;quot; &amp;gt;}}&lt;/code&gt; shortcode where you would like the chart to appear.&lt;/p&gt;
 &lt;p&gt;Demo:&lt;/p&gt;
-&lt;div id="chart-136895247" class="chart"&gt;&lt;/div&gt;
+&lt;div id="chart-963845712" class="chart"&gt;&lt;/div&gt;
 &lt;script&gt;
 (function() {
 async function fetchChartJSON() {
@@ -567,7 +567,7 @@ return;
 clearInterval( a );
 fetchChartJSON().then(chart =&gt; {
 console.debug('Plotting chart...')
-window.Plotly.newPlot('chart-136895247', chart.data, chart.layout, {responsive: true});
+window.Plotly.newPlot('chart-963845712', chart.data, chart.layout, {responsive: true});
 });
 }, 500 );
 })();
@@ -956,4 +956,50 @@ Parallel 4 : des6, after des4, 1d
 &lt;/li&gt;
 &lt;li&gt;&lt;input disabled="" type="checkbox"&gt; Do something else&lt;/li&gt;
 &lt;/ul&gt;
-&lt;h2 id="did-you-find-this-page-helpful-consider-sharing-it-"&gt;Did you find this page helpful? Consider sharing it 🙌&lt;/h2&gt;</description></item></channel></rss>
+&lt;h2 id="did-you-find-this-page-helpful-consider-sharing-it-"&gt;Did you find this page helpful? Consider sharing it 🙌&lt;/h2&gt;</description></item><item><title>Organizer of Working seminar for Ph.D. students in the LJLL</title><link>https://zhechenmath-wq.github.io/zhechen-website/organizations/working-seminar/</link><pubDate>Mon, 01 May 2023 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/organizations/working-seminar/</guid><description/></item><item><title>Moments from Conferences</title><link>https://zhechenmath-wq.github.io/zhechen-website/personal/moments-from-conferences/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/personal/moments-from-conferences/</guid><description>&lt;p&gt;A few photos from conferences, workshops, and academic visits.&lt;/p&gt;
+&lt;h2 id="toulouse-2026-june"&gt;Toulouse 2026 June&lt;/h2&gt;
+&lt;p&gt;
+&lt;figure &gt;
+&lt;div class="flex justify-center "&gt;
+&lt;div class="w-full" &gt;&lt;img src="https://zhechenmath-wq.github.io/zhechen-website/uploads/Toulouse.JPG" alt="Toulouse" loading="lazy" data-zoomable /&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/figure&gt;
+&lt;/p&gt;
+&lt;h2 id="bonn-2025-june"&gt;Bonn 2025 June&lt;/h2&gt;
+&lt;p&gt;
+&lt;figure &gt;
+&lt;div class="flex justify-center "&gt;
+&lt;div class="w-full" &gt;&lt;img src="https://zhechenmath-wq.github.io/zhechen-website/uploads/Bonn.JPG" alt="Bonn" loading="lazy" data-zoomable /&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/figure&gt;
+&lt;/p&gt;
+&lt;h2 id="aussois-2024-october"&gt;Aussois 2024 October&lt;/h2&gt;
+&lt;p&gt;
+&lt;figure &gt;
+&lt;div class="flex justify-center "&gt;
+&lt;div class="w-full" &gt;&lt;img src="https://zhechenmath-wq.github.io/zhechen-website/uploads/Aussois.JPG" alt="Aussois" loading="lazy" data-zoomable /&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/figure&gt;
+&lt;/p&gt;
+&lt;h2 id="chania-2024-july"&gt;Chania 2024 July&lt;/h2&gt;
+&lt;p&gt;
+&lt;figure &gt;
+&lt;div class="flex justify-center "&gt;
+&lt;div class="w-full" &gt;&lt;img src="https://zhechenmath-wq.github.io/zhechen-website/uploads/Chania.JPG" alt="Chania" loading="lazy" data-zoomable /&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/figure&gt;
+&lt;/p&gt;
+&lt;h2 id="zurich-2024-january"&gt;Zurich 2024 January&lt;/h2&gt;
+&lt;p&gt;
+&lt;figure &gt;
+&lt;div class="flex justify-center "&gt;
+&lt;div class="w-full" &gt;&lt;img src="https://zhechenmath-wq.github.io/zhechen-website/uploads/Zurich.JPG" alt="Zurich" loading="lazy" data-zoomable /&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/figure&gt;
+&lt;/p&gt;
+&lt;h2 id="marseille-2022-november"&gt;Marseille 2022 November&lt;/h2&gt;
+&lt;p&gt;
+&lt;figure &gt;
+&lt;div class="flex justify-center "&gt;
+&lt;div class="w-full" &gt;&lt;img src="https://zhechenmath-wq.github.io/zhechen-website/uploads/Marseille.JPG" alt="Marseille" loading="lazy" data-zoomable /&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/figure&gt;
+&lt;/p&gt;</description></item><item><title>Remembering Claude Bardos</title><link>https://zhechenmath-wq.github.io/zhechen-website/personal/remembering-claude-bardos/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://zhechenmath-wq.github.io/zhechen-website/personal/remembering-claude-bardos/</guid><description>&lt;p&gt;I was deeply saddened to know of
+passing. Although I had few opportunities to speak with him, his work and his example profoundly influenced me.&lt;/p&gt;
+&lt;p&gt;During my years at LJLL, he continued to attend seminars, take part actively in discussions, and ask insightful questions, even at the age of 85. His enduring curiosity and dedication to research left a deep impression on me.&lt;/p&gt;
+&lt;p&gt;In my memory, he will always be sitting in the first row of the seminar room, with his glasses hanging from a cord around his neck, speaking calmly and clearly, and always with a warm smile on his face.&lt;/p&gt;
+&lt;p&gt;May he rest in peace.&lt;/p&gt;</description></item></channel></rss>
