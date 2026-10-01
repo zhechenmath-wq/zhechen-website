@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spray Nozzle Demo</title>
+<meta name="description" content="A liquid spray leaving a nozzle: droplets (small particles) carried by the surrounding gas. The spray spreads out and becomes thinner and thinner away from the nozzle.">
+<!--
+  Spray leaving a nozzle: a two-phase flow of liquid droplets in a gas
+  --------------------------------------------------------------------
+  Self-contained, no dependencies. Embed with:
+    <iframe src="spray.html?controls=0" title="Spray leaving a nozzle" loading="lazy"
+            style="width:100%;aspect-ratio:16/9;border:0" allowfullscreen></iframe>
+
+  Model (a demonstration, not a CFD computation). Lengths are in units of the frame, times in s.
+  - Droplets are points x ∈ R³ with velocity v, all with the same diameter (so the same size and
+    the same colour on screen). They leave the liquid column at the orifice (radius r₀) at speed V₀
+    inside a cone, and they do not interact with each other. Each one follows Stokes drag towards
+    the gas velocity it sees:
+        dv/dt = (u_g(x) + u'(t) − v) / τ.
+  - Turbulence: u' = σ(x) (c Ξ + √(1 − c²) ξ), where ξ is an Ornstein–Uhlenbeck process per droplet
+    and Ξ one per packet of droplets injected together in the same angular sector (the eddies make
+    clusters and wisps); σ is proportional to the local mean gas speed. The injection speed and
+    direction also fluctuate slowly (puffs and flapping of the spray).
+  - Gas: a steady, axisymmetric, divergence-free jet entrained by the spray. Stream function
+    ψ = Q(x) F(η), η = r/δ(x), F = η²/(1 + η²/4), δ = δ₀ + βx, Q = U_c δ²/2, U_c ∝ (x + x₀)^(−1/4).
+    Outside the jet the gas is drawn in towards the axis (entrainment). The gas starts at rest and
+    is set in motion as the spray front passes.
+  - What is drawn is a slice through the axis: the grey streaks are gas tracers in the plane of the
+    picture, and only droplets with |z| < 0.06 are shown. The droplet density seen in the picture is
+    therefore the density in space (the volume fraction). It falls roughly like 1/x² as the cone
+    widens: the spray gets thinner and thinner.
+  - Optional: breakup=1 injects larger drops that split in two (same volume) while d |v − u|² > We_ref.
+  The motion is exactly periodic once the spray is established (period = `period` seconds), so the
+  recorded videos loop seamlessly.
+
+  URL parameters (all optional):
+    rate=10000       droplets injected per second
+    angle=12         cone half-angle in degrees
+    dot=1            droplet size on screen (multiplier)
+    color=174a8c     droplet colour (hex, without #)
+    spread=0         spread of the droplet sizes (log-normal σ; 0 = all the same)
+    breakup=0        1 = large drops break up into smaller ones (sizes then vary)
+    seed=1           random seed
+    speed=1          playback speed
+    period=8         loop period in seconds (for seamless recordings)
+    dir=right|left|down|up   direction of the spray
+    gas=1            show the gas tracers
+    core=1           show the liquid leaving the orifice
+    nozzle=1         show the nozzle
+    labels=1         name the three regimes along the axis: Thick, Thin, Very thin (0 = no labels)
+    zones=0.2,0.56   where the regimes change, as fractions of the distance from the nozzle to the far edge
+    thick, thin, vthin   texts of the three labels (e.g. thick=%C3%89pais&thin=Mince&vthin=Tr%C3%A8s%20mince)
+    thicksub, thinsub, vthinsub   optional second lines under the labels
+    bounds=1         faint dashed lines where the regimes change (0 = none)
+    legend=0         1 = legend for the droplets and the gas (texts: ldrop, lgas)
+    title=           optional title (top left)
+    warm=0           1 = start with the spray already established (no onset)
+    replay=0         restart from the onset every N seconds (0 = never)
+    onshow=resume|restart   what to do when the frame becomes visible again (slides)
+    controls=1       control bar (0 = bare animation, for slides and web pages)
+    autoplay=1       start playing (default: on unless the viewer prefers reduced motion)
+    theme=auto|light|dark
+    scale=1          text size multiplier
+    font=system|latex   "latex" uses Latin Modern Sans (needs the font installed locally)
+    bg=#ffffff|transparent
+
+  From the parent page:  iframe.contentWindow.postMessage('restart' | 'play' | 'pause', '*')
+  Keyboard: Space play/pause · R restart · F fullscreen
+-->
+<style>
+:root{
+  color-scheme: light;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --bg:#ffffff; --ink:#0b0b0b; --ink2:#52514e; --muted:#7a7872;
+  --drop:#174a8c; --liquid:#174a8c;
+  --gas:#8f8d86; --noz-hi:#ecebe6; --noz-lo:#a9a79f; --noz-line:#52514e;
+  --ctl:#f4f3ef; --ctl-hover:#e9e8e3; --ctl-bd:rgba(11,11,11,.14); --focus:#2a78d6;
+  --tip:#ffffff; --shadow:0 4px 18px rgba(0,0,0,.12);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#121211; --ink:#ffffff; --ink2:#c3c2b7; --muted:#8f8d86;
+    --drop:#a8cdf5; --liquid:#a8cdf5;
+    --gas:#5f5e59; --noz-hi:#8f8d86; --noz-lo:#3a3a36; --noz-line:#c3c2b7;
+    --ctl:#1f1f1d; --ctl-hover:#2b2b28; --ctl-bd:rgba(255,255,255,.14); --focus:#3987e5;
+    --tip:#232321; --shadow:0 4px 18px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#121211; --ink:#ffffff; --ink2:#c3c2b7; --muted:#8f8d86;
+  --drop:#a8cdf5; --liquid:#a8cdf5;
+  --gas:#5f5e59; --noz-hi:#8f8d86; --noz-lo:#3a3a36; --noz-line:#c3c2b7;
+  --ctl:#1f1f1d; --ctl-hover:#2b2b28; --ctl-bd:rgba(255,255,255,.14); --focus:#3987e5;
+  --tip:#232321; --shadow:0 4px 18px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--font)}
+body.transparent{background:transparent}
+#app{display:flex;flex-direction:column;height:100%;min-height:160px}
+#stage{position:relative;flex:1 1 auto;min-height:0;overflow:hidden}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:manipulation}
+#bar{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:7px 10px;
+  border-top:1px solid var(--ctl-bd);font:13px/1.2 var(--font);position:relative}
+#bar[hidden]{display:none}
+#bar button,#bar select,.pop input,.pop select,.pop button,.pop textarea{
+  font:inherit;color:var(--ink);background:var(--ctl);border:1px solid var(--ctl-bd);
+  border-radius:6px;padding:5px 9px;min-height:30px}
+#bar button{display:inline-flex;align-items:center;gap:6px}
+#bar button:hover,.pop button:hover{background:var(--ctl-hover);cursor:pointer}
+#bar :focus-visible,.pop :focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+#bar .grow{flex:1 1 auto}
+#bar label{display:inline-flex;align-items:center;gap:6px;color:var(--ink2)}
+#bar .ico{width:14px;height:14px;vertical-align:-2px;fill:currentColor}
+.pop{position:absolute;right:10px;bottom:calc(100% + 6px);width:min(360px,calc(100vw - 20px));
+  background:var(--tip);border:1px solid var(--ctl-bd);border-radius:10px;box-shadow:var(--shadow);
+  padding:12px;display:none;z-index:10;font:13px/1.35 var(--font);max-height:calc(100vh - 70px);overflow:auto}
+.pop.open{display:block}
+.pop h3{margin:0 0 8px;font-size:13px;font-weight:600}
+.pop .g{display:grid;grid-template-columns:auto 1fr;gap:7px 10px;align-items:center}
+.pop .g label{color:var(--ink2)}
+.pop input[type=text],.pop input[type=number],.pop select{width:100%}
+.pop input[type=checkbox]{min-height:0;width:16px;height:16px;accent-color:var(--focus)}
+.pop .row{display:flex;gap:6px;margin-top:10px;justify-content:flex-end;align-items:center}
+.pop .row .lbl{margin-right:auto;color:var(--ink2);display:inline-flex;gap:6px;align-items:center}
+.pop textarea{width:100%;height:92px;resize:vertical;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.pop .note{color:var(--muted);font-size:12px;margin-top:6px}
+.pop .err{color:#d03b3b;font-size:12px;margin-top:6px;min-height:1em}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="cv" role="img" aria-label="Animation: a liquid spray leaves a nozzle. Near the nozzle the droplets are large and packed together; they break up, spread out in a cone carried by the surrounding gas, and get farther and farther apart downstream."></canvas>
+  </div>
+  <div id="bar">
+    <button id="bPlay" type="button" aria-label="Pause"></button>
+    <button id="bReset" type="button" aria-label="Restart the injection"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5a5.5 5.5 0 1 1-5.2 7.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M2.2 2.6v4.1h4.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Restart</button>
+    <label>Speed
+      <select id="sSpeed" aria-label="Playback speed">
+        <option value="0.125">0.125</option><option value="0.25">0.25</option><option value="0.5">0.5</option>
+        <option value="1">1</option><option value="2">2</option>
+      </select>
+    </label>
+    <label><input id="cGas" type="checkbox"> Gas</label>
+    <label><input id="cLabels" type="checkbox"> Labels</label>
+    <span class="grow"></span>
+    <button id="bSettings" type="button" aria-expanded="false" aria-controls="pSettings">Settings</button>
+    <button id="bEmbed" type="button" aria-expanded="false" aria-controls="pEmbed">Embed</button>
+    <button id="bSvg" type="button" title="Download the current frame as SVG">SVG</button>
+    <button id="bPng" type="button" title="Download the current frame as PNG">PNG</button>
+    <button id="bFull" type="button" title="Fullscreen (F)" aria-label="Fullscreen"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+
+    <div class="pop" id="pSettings" role="dialog" aria-label="Spray settings">
+      <h3>Spray</h3>
+      <div class="g">
+        <label for="iRate">Droplets per second</label><input id="iRate" type="number" min="50" max="40000" step="500">
+        <label for="iAngle">Cone half-angle (°)</label><input id="iAngle" type="number" min="2" max="35" step="1">
+        <label for="iColor">Droplet colour</label><input id="iColor" type="color">
+        <label for="iDot">Droplet size on screen</label><input id="iDot" type="number" min="0.2" max="5" step="0.1">
+        <label for="iSeed">Seed</label><input id="iSeed" type="number" min="0" step="1">
+        <label for="iDir">Direction</label>
+        <select id="iDir"><option value="right">left → right</option><option value="left">right → left</option><option value="down">top → bottom</option><option value="up">bottom → top</option></select>
+        <label for="iCore">Liquid at the orifice</label><input id="iCore" type="checkbox">
+        <label for="iWarm">Start established</label><input id="iWarm" type="checkbox" title="Skip the onset: start with the spray already developed">
+      </div>
+      <div class="err" id="eSettings" aria-live="polite"></div>
+      <div class="row">
+        <button id="bRandom" type="button">New seed</button>
+        <button id="bApply" type="button">Apply</button>
+      </div>
+      <div class="note">All droplets have the same size. They do not interact; each one is dragged towards the gas velocity (Stokes drag) and pushed around by turbulent eddies. Only a slice through the axis is drawn.</div>
+    </div>
+
+    <div class="pop" id="pEmbed" role="dialog" aria-label="Embed code">
+      <h3>Embed this view</h3>
+      <textarea id="tEmbed" readonly aria-label="iframe embed code"></textarea>
+      <div class="note">Uses the current settings. Replace the address with the one where you host this file.</div>
+      <div class="row"><label class="lbl"><input id="cEmbCtl" type="checkbox"> control bar</label><button id="bCopy" type="button">Copy</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ------------------------------------------------------------------ config */
+const Q = new URLSearchParams(location.search);
+const prefersReduced = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const num = (k, def, lo, hi) => { const v = parseFloat(Q.get(k)); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def; };
+const flag = (k, def) => { const v = Q.get(k); if (v === null) return def; return !/^(0|false|no|off)$/i.test(v); };
+const str = (k, def) => Q.has(k) ? Q.get(k) : def;
+const DEF = { rate: 10000, angle: 12, dot: 1, spread: 0, seed: 1, speed: 1, period: 8, dir: 'right',
+              thick: 'Thick', thin: 'Thin', vthin: 'Very thin', thicksub: '', thinsub: '', vthinsub: '',
+              zones: [0.2, 0.56], ldrop: 'liquid droplets', lgas: 'gas' };
+const cfg = {
+  rate: Math.round(num('rate', DEF.rate, 50, 40000)),
+  angle: num('angle', DEF.angle, 2, 35),
+  dot: num('dot', DEF.dot, 0.2, 5),
+  color: /^#?[0-9a-f]{3}([0-9a-f]{3})?$/i.test(Q.get('color') || '') ? '#' + Q.get('color').replace('#', '') : '',
+  spread: num('spread', DEF.spread, 0, 0.8),
+  seed: Math.round(num('seed', DEF.seed, 0, 2147483647)),
+  speed: num('speed', DEF.speed, 0.02, 10),
+  period: Math.round(num('period', DEF.period, 1, 60)),
+  dir: /^(right|left|up|down)$/.test(Q.get('dir') || '') ? Q.get('dir') : DEF.dir,
+  gas: flag('gas', true),
+  core: flag('core', true),
+  breakup: flag('breakup', false),
+  nozzle: flag('nozzle', true),
+  labels: flag('labels', true),
+  thick: str('thick', DEF.thick), thin: str('thin', DEF.thin), vthin: str('vthin', DEF.vthin),
+  thicksub: str('thicksub', DEF.thicksub), thinsub: str('thinsub', DEF.thinsub), vthinsub: str('vthinsub', DEF.vthinsub),
+  zones: (() => { const a = String(Q.get('zones') || '').split(/[,;\s]+/).map(Number).filter(v => v > 0 && v < 1).sort((x, y) => x - y);
+                  return a.length === 2 && a[1] - a[0] > 0.02 ? a : DEF.zones.slice(); })(),
+  legend: flag('legend', false),
+  bounds: flag('bounds', true),
+  ldrop: str('ldrop', DEF.ldrop), lgas: str('lgas', DEF.lgas),
+  title: str('title', ''),
+  controls: flag('controls', true),
+  autoplay: Q.has('autoplay') ? flag('autoplay', true) : !prefersReduced,
+  warm: null,
+  replay: num('replay', 0, 0, 3600),
+  onshow: Q.get('onshow') === 'restart' ? 'restart' : 'resume',
+  theme: /^(light|dark)$/.test(Q.get('theme') || '') ? Q.get('theme') : 'auto',
+  scale: num('scale', 1, 0.3, 5),
+  font: Q.get('font') === 'latex' ? 'latex' : 'system',
+  bg: Q.get('bg'),
+  record: flag('record', false),
+  dpr: num('dpr', 0, 0, 4)
+};
+/* no autoplay: show the established spray rather than an empty nozzle (unless warm=0 is explicit) */
+cfg.warm = Q.has('warm') ? flag('warm', false) : (!cfg.autoplay && !cfg.record);
+if (cfg.theme !== 'auto') document.documentElement.setAttribute('data-theme', cfg.theme);
+if (cfg.bg === 'transparent') document.body.classList.add('transparent');
+
+/* ------------------------------------------------------------------ model constants
+   Lengths: the frame spans XPAD + XLEN = 1.8 units along the axis. Times: seconds. */
+const SPS = 60, DT = 1 / SPS;                  /* fixed time step (steps per second) */
+const P = {
+  XPAD: 0.16, XLEN: 1.64,                      /* nozzle tip at XPAD from the frame edge */
+  r0: 0.010,                                   /* orifice radius */
+  V0: 1.3, vJit: 0.05,                         /* injection speed and its relative spread */
+  tau0: 0.9,                                   /* drag relaxation time of a droplet (diameter d = 1) */
+  dmin: 0.4, dmax: 3.2,                        /* diameter range when sizes vary */
+  dPrim: 2.0, WeRef: 1.0, nuB: 20, dStable: 1.0, kick: 0.025, /* optional break-up: injected size, critical d·|w|², rate, smallest size, kick */
+  Ug0: 0.95, x0: 0.25, pw: 0.25,               /* gas centre-line speed U_c = Ug0 (x0/(x+x0))^pw */
+  del0: 0.02, beta: 0.2,                       /* jet width δ = δ0 + βx */
+  I: 0.25, TL: 0.08, sigAmb: 0.01, Ldev: 0.12, /* turbulence: intensity, Lagrangian time, ambient level, development length */
+  coh: 0.72, TLc: 0.3, win: 4, NS: 12,         /* eddies: shared part of the fluctuation, their time scale, packet = 4 steps × 12 sectors */
+  pulse: 0.045, flap: 0.03,                    /* slow unsteadiness of the injection: speed (puffs) and direction (flapping) */
+  vFront: 1.45,                                /* speed at which the gas is set in motion at the onset */
+  maxAge: 6,                                   /* droplets older than this are removed (s) */
+  rad: 0.0011,                                 /* on-screen radius of a droplet (d = 1), in frame units */
+  slab: 0.06, zKill: 0.2,                      /* only droplets with |z| < slab are drawn (a slice through the axis) */
+  gasDensity: 200, gasLife: 2.6, gasTail: 0.07,/* gas tracers per unit area, lifetime (s), streak length (s) */
+  coreLen: 0.035                               /* length of the intact liquid at the orifice */
+};
+
+/* ------------------------------------------------------------------ random numbers */
+function hash32(a, b){
+  let h = Math.imul(a ^ 0x9E3779B9, 0x85EBCA6B) ^ Math.imul(b + 0x632BE5AB, 0xC2B2AE35);
+  h ^= h >>> 16; h = Math.imul(h, 0x7FEB352D); h ^= h >>> 15; h = Math.imul(h, 0x846CA68B); h ^= h >>> 16;
+  return h | 0 || 0x1234567;
+}
+
+/* ------------------------------------------------------------------ gas field
+   Axisymmetric jet from the stream function ψ = Q(x) F(η), η = r/δ(x), F = η²/(1+η²/4):
+     u_x = U_c g(η), g = (1+η²/4)^-2,  u_r = −(1/r)[Q' F − Q (δ'/δ) η F'],  Q = U_c δ²/2.
+   Written into GF = {ux, ur, sig}. m ∈ [0,1] ramps the flow up behind the spray front. */
+const GF = { ux: 0, ur: 0, sig: 0 };
+function gasAt(x, r, m){
+  const xe = x < 0 ? 0 : x, X = xe + P.x0;
+  const Uc = P.Ug0 * Math.pow(P.x0 / X, P.pw), dUc = -P.pw * Uc / X;
+  const del = P.del0 + P.beta * xe, eta = r / del, q = 1 + 0.25 * eta * eta, g = 1 / (q * q);
+  GF.ux = m * Uc * g;
+  if (r > 1e-9){
+    const Qf = 0.5 * Uc * del * del, dQ = 0.5 * (dUc * del * del + 2 * Uc * del * P.beta);
+    const F = eta * eta / q, Fp = 2 * eta * g;
+    GF.ur = -m * (dQ * F - Qf * (P.beta / del) * eta * Fp) / r;
+  } else GF.ur = 0;
+  GF.sig = m * P.I * Uc * Math.sqrt(g) * (1 - Math.exp(-xe / P.Ldev)) + P.sigAmb;
+}
+function onsetFactor(x, t){
+  const u = (P.vFront * t - 0.05 - x) / 0.5;
+  if (u >= 1) return 1; if (u <= 0) return 0;
+  return u * u * (3 - 2 * u);
+}
+
+/* ------------------------------------------------------------------ simulation state */
+function Pool(fields, cap){
+  const o = { n: 0, cap, fields };
+  for (const [k, T] of fields) o[k] = new T(cap);
+  return o;
+}
+function grow(o){
+  const cap = o.cap * 2;
+  for (const [k, T] of o.fields){ const a = new T(cap); a.set(o[k]); o[k] = a; }
+  o.cap = cap;
+}
+function kill(o, i){
+  const j = --o.n;
+  if (i !== j) for (const [k] of o.fields) o[k][i] = o[k][j];
+}
+/* order-preserving removal (used when recording, so that every frame is drawn in the same order
+   and the loop is exact to the pixel) */
+function compact(o, dead){
+  let w = 0;
+  for (let i = 0; i < o.n; i++){
+    if (dead(i)) continue;
+    if (w !== i) for (const [k] of o.fields) o[k][w] = o[k][i];
+    w++;
+  }
+  o.n = w;
+}
+const F64 = Float64Array, F32 = Float32Array, I32 = Int32Array, U8 = Uint8Array;
+let D = null, G = null;          /* droplets, gas tracers */
+let S = { n: 0, kD: 0, kG: 0, gasRate: 0, MD: 1, MG: 1, sigT: 0 };
+let V = null;                    /* view (screen mapping) */
+
+function build(){
+  D = Pool([['x', F64], ['y', F64], ['z', F64], ['vx', F64], ['vy', F64], ['vz', F64], ['fx', F64], ['fy', F64], ['fz', F64],
+            ['px', F32], ['py', F32], ['d', F32], ['rad', F32], ['tau', F64], ['rs', I32], ['age', I32], ['pk', I32]], 16384);
+  G = Pool([['x', F64], ['y', F64], ['px', F32], ['py', F32], ['age', I32]], 2048);
+  const area = (P.XPAD + V.xvis + 0.04) * (2 * V.hT + 0.04);
+  S = { n: 0, kD: 0, kG: 0,
+        gasRate: Math.max(1, Math.round(P.gasDensity * area / P.gasLife)),
+        MD: cfg.rate * cfg.period, sigT: P.V0 * Math.tan(cfg.angle * Math.PI / 180) / 1.645 };
+  S.MG = S.gasRate * cfg.period;
+  /* coherent eddies: droplets injected in the same window of P.win steps and the same angular sector
+     share part of their turbulent forcing (an OU process per packet, kept in a ring buffer) */
+  let pb = 1; while (pb < Math.ceil(P.maxAge * SPS / P.win + 2) * P.NS) pb <<= 1;
+  S.PB = pb; S.CX = new F64(pb); S.CY = new F64(pb); S.CZ = new F64(pb); S.CR = new I32(pb).fill(1);
+  S.WP = cfg.period * SPS / P.win;             /* packet windows per period */
+  /* injection unsteadiness: a few harmonics of the period near 0.6, 1.1 and 1.8 Hz */
+  S.hm = [0.6, 1.1, 1.8, 0.4, 0.9, 1.5].map(f => Math.max(1, Math.round(f * cfg.period)));
+  /* the gas is there before the injection starts: tracers of every age, at rest */
+  const life = Math.round(P.gasLife * SPS);
+  for (let st = -life; st < 0; st++){
+    const c0 = Math.floor(S.gasRate * st / SPS), c1 = Math.floor(S.gasRate * (st + 1) / SPS);
+    for (let k = c0; k < c1; k++) spawnGas(k, -st);
+  }
+  S.kG = 0;
+}
+const mod = (k, m) => ((k % m) + m) % m;
+
+function injMod(t){
+  const w = 2 * Math.PI * t / cfg.period, h = S.hm;
+  return [0.55 * Math.sin(h[0] * w + 0.7) + 0.35 * Math.sin(h[1] * w + 2.1) + 0.25 * Math.sin(h[2] * w + 4.0),
+          0.6 * Math.sin(h[3] * w + 1.3) + 0.4 * Math.sin(h[4] * w + 5.1) + 0.3 * Math.sin(h[5] * w + 0.2),
+          0.6 * Math.sin(h[3] * w + 3.3) + 0.4 * Math.sin(h[4] * w + 0.9) + 0.3 * Math.sin(h[5] * w + 2.6)];
+}
+function spawnDroplet(k, n, mo){
+  if (D.n >= D.cap) grow(D);
+  const i = D.n++;
+  let s = hash32(mod(k, S.MD), cfg.seed);
+  const u = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+  const gs = () => (u() + u() + u() - 1.5) * 2;
+  /* droplets leave the liquid column that comes out of the orifice (length coreLen) */
+  const xb = cfg.core ? P.coreLen * Math.pow(u(), 0.7) : 0;
+  const rr = P.r0 * Math.pow(1 - xb / P.coreLen, 0.75) * Math.sqrt(u()), th = 2 * Math.PI * u();
+  let d = (cfg.breakup ? P.dPrim : 1) * Math.exp(cfg.spread * gs() - 0.5 * cfg.spread * cfg.spread);
+  d = Math.min(P.dmax, Math.max(P.dmin, d));
+  const sp = P.V0 * (1 + P.vJit * gs() + P.pulse * mo[0]);
+  let vy = S.sigT * gs(), vz = S.sigT * gs();
+  const sec = Math.min(P.NS - 1, Math.floor((Math.atan2(vz, vy) / (2 * Math.PI) + 0.5) * P.NS));
+  vy += P.flap * P.V0 * mo[1]; vz += P.flap * P.V0 * mo[2];
+  const x = xb - 0.004 + u() * sp * DT;
+  D.x[i] = x; D.y[i] = rr * Math.cos(th); D.z[i] = rr * Math.sin(th);
+  D.vx[i] = Math.sqrt(Math.max(0.01, sp * sp - vy * vy - vz * vz)); D.vy[i] = vy; D.vz[i] = vz;
+  D.fx[i] = 0; D.fy[i] = 0; D.fz[i] = 0;
+  D.px[i] = D.x[i]; D.py[i] = D.y[i];
+  setSize(i, d); D.age[i] = 0;
+  D.pk[i] = (Math.floor(n / P.win) * P.NS + sec) & (S.PB - 1);
+  D.rs[i] = s;
+}
+function setSize(i, d){
+  D.d[i] = d; D.rad[i] = P.rad * d; D.tau[i] = P.tau0 * d * d;
+}
+function spawnGas(k, age){
+  if (G.n >= G.cap) grow(G);
+  const i = G.n++;
+  let s = hash32(mod(k, S.MG) + 0x5bd1e995, cfg.seed);
+  const u = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+  G.x[i] = -P.XPAD - 0.02 + u() * (P.XPAD + V.xvis + 0.04);
+  G.y[i] = (u() * 2 - 1) * (V.hT + 0.02);
+  G.px[i] = G.x[i]; G.py[i] = G.y[i]; G.age[i] = age || 0;
+}
+
+function step(){
+  const n = S.n, t = n * DT;
+  /* births during this step (a periodic schedule: seeds repeat with period cfg.period) */
+  if (n % P.win === 0){                        /* new packets of eddies */
+    const w = n / P.win, wp = mod(w, S.WP);
+    for (let j = 0; j < P.NS; j++){
+      const sl = (w * P.NS + j) & (S.PB - 1);
+      let s = hash32(wp * P.NS + j + 0x3c6ef372, cfg.seed);
+      const u = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+      S.CX[sl] = (u() + u() + u() - 1.5) * 2; S.CY[sl] = (u() + u() + u() - 1.5) * 2; S.CZ[sl] = (u() + u() + u() - 1.5) * 2;
+      S.CR[sl] = s;
+    }
+  }
+  {
+    const c = Math.exp(-DT / P.TLc), bc = Math.sqrt((1 - c * c) * 6), CX = S.CX, CY = S.CY, CZ = S.CZ, CR = S.CR;
+    for (let j = 0; j < S.PB; j++){
+      let s = CR[j];
+      const u = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+      CX[j] = c * CX[j] + bc * (u() + u() - 1); CY[j] = c * CY[j] + bc * (u() + u() - 1); CZ[j] = c * CZ[j] + bc * (u() + u() - 1);
+      CR[j] = s;
+    }
+  }
+  const c1 = Math.floor(cfg.rate * (n + 1) / SPS);
+  if (c1 > S.kD){ const mo = injMod(t); for (let k = S.kD; k < c1; k++) spawnDroplet(k, n, mo); }
+  S.kD = c1;
+  const g1 = Math.floor(S.gasRate * (n + 1) / SPS);
+  for (let k = S.kG; k < g1; k++) spawnGas(k, 0);
+  S.kG = g1;
+
+  const onset = P.vFront * t - 0.05 < V.xvis + 1;
+  const a = Math.exp(-DT / P.TL), bq = Math.sqrt((1 - a * a) * 6);
+  const xK = V.xvis + 0.06, yK = V.hT + 0.06, zK = P.zKill, maxA = Math.round(P.maxAge * SPS);
+  const ch = P.coh, ci = Math.sqrt(1 - P.coh * P.coh), CX = S.CX, CY = S.CY, CZ = S.CZ, PK = D.pk;
+  /* droplets */
+  while (D.cap < 2 * D.n + 16) grow(D);     /* room for every droplet to split in this step */
+  const X = D.x, Y = D.y, Z = D.z, VX = D.vx, VY = D.vy, VZ = D.vz, FX = D.fx, FY = D.fy, FZ = D.fz, RS = D.rs;
+  const brk = cfg.breakup, n0 = D.n;
+  for (let i = 0; i < n0; i++){
+    const x = X[i], y = Y[i], z = Z[i], r = Math.sqrt(y * y + z * z);
+    gasAt(x, r, onset ? onsetFactor(x, t) : 1);
+    const ir = r > 1e-9 ? GF.ur / r : 0;
+    let s = RS[i];
+    const u = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+    /* seen gas fluctuation = σ (coherent eddy of the packet + individual part); unit-variance OU processes */
+    FX[i] = a * FX[i] + bq * (u() + u() - 1);
+    FY[i] = a * FY[i] + bq * (u() + u() - 1);
+    FZ[i] = a * FZ[i] + bq * (u() + u() - 1);
+    const sg = GF.sig, pk = PK[i];
+    const ugx = GF.ux + sg * (ch * CX[pk] + ci * FX[i]), ugy = ir * y + sg * (ch * CY[pk] + ci * FY[i]), ugz = ir * z + sg * (ch * CZ[pk] + ci * FZ[i]);
+    const k = DT / D.tau[i], ik = 1 / (1 + k);
+    let vx = (VX[i] + k * ugx) * ik, vy = (VY[i] + k * ugy) * ik, vz = (VZ[i] + k * ugz) * ik;
+    D.px[i] = x; D.py[i] = y;
+    D.age[i]++;
+    /* break-up: a droplet splits in two (same total volume) when d·|v − u|² exceeds WeRef */
+    let j = -1;
+    if (brk && D.d[i] > P.dStable){
+      const wx = vx - ugx, wy = vy - ugy, wz = vz - ugz, w2 = wx * wx + wy * wy + wz * wz;
+      const We = D.d[i] * w2 / P.WeRef;
+      if (We > 1 && u() < P.nuB * Math.sqrt(We - 1) * DT){
+        const kk = P.kick * Math.sqrt(w2);
+        const kx = kk * (u() + u() - 1) * 2.4, ky = kk * (u() + u() - 1) * 2.4, kz = kk * (u() + u() - 1) * 2.4;
+        j = D.n++;
+        for (const [f] of D.fields) D[f][j] = D[f][i];
+        RS[j] = hash32(s, 0x2545F491);
+        setSize(i, D.d[i] * 0.7937005); setSize(j, D.d[i]);
+        VX[j] = vx + kx; VY[j] = vy + ky; VZ[j] = vz + kz;
+        vx -= kx; vy -= ky; vz -= kz;
+      }
+    }
+    RS[i] = s;
+    VX[i] = vx; VY[i] = vy; VZ[i] = vz;
+    X[i] = x + vx * DT; Y[i] = y + vy * DT; Z[i] = z + vz * DT;
+    if (j >= 0){ X[j] = x + VX[j] * DT; Y[j] = y + VY[j] * DT; Z[j] = z + VZ[j] * DT; }
+  }
+  const deadD = i => X[i] > xK || Y[i] > yK || Y[i] < -yK || Z[i] > zK || Z[i] < -zK || D.age[i] > maxA;
+  if (cfg.record) compact(D, deadD); else for (let i = D.n - 1; i >= 0; i--) if (deadD(i)) kill(D, i);
+  /* gas tracers (in the plane of the picture), midpoint rule */
+  const life = Math.round(P.gasLife * SPS), gxK = V.xvis + 0.1, gyK = V.hT + 0.1;
+  for (let i = 0; i < G.n; i++){
+    const x = G.x[i], y = G.y[i];
+    let m = onset ? onsetFactor(x, t) : 1;
+    gasAt(x, Math.abs(y), m);
+    const hx = x + 0.5 * DT * GF.ux, hy = y + 0.5 * DT * GF.ur * Math.sign(y);
+    m = onset ? onsetFactor(hx, t) : 1;
+    gasAt(hx, Math.abs(hy), m);
+    G.px[i] = x; G.py[i] = y;
+    G.x[i] = x + DT * GF.ux; G.y[i] = y + DT * GF.ur * Math.sign(hy);
+    G.age[i]++;
+  }
+  const deadG = i => G.age[i] >= life || G.x[i] > gxK || G.y[i] > gyK || G.y[i] < -gyK;
+  if (cfg.record) compact(G, deadG); else for (let i = G.n - 1; i >= 0; i--) if (deadG(i)) kill(G, i);
+  S.n = n + 1;
+}
+function stepTo(nTarget){ while (S.n < nTarget) step(); }
+
+/* ------------------------------------------------------------------ view */
+let W = 0, H = 0, dpr = 1, C = {}, FONT = 'sans-serif';
+function computeView(){
+  const horiz = cfg.dir === 'right' || cfg.dir === 'left';
+  const La = horiz ? W : H, Lt = horiz ? H : W;
+  const s = Math.min(La / (P.XPAD + P.XLEN), Lt / 0.9);
+  const v = { horiz, s, hT: Lt / 2 / s, xvis: La / s - P.XPAD };
+  const o = P.XPAD * s;
+  if (cfg.dir === 'right') v.m = [s, 0, 0, -s, o, H / 2];
+  else if (cfg.dir === 'left') v.m = [-s, 0, 0, -s, W - o, H / 2];
+  else if (cfg.dir === 'down') v.m = [0, s, s, 0, W / 2, o];
+  else v.m = [0, -s, s, 0, W / 2, H - o];
+  v.fs = Math.max(11, Math.min(48, 0.026 * Math.min(Math.max(W, H), 1.78 * Math.min(W, H)))) * cfg.scale;
+  return v;
+}
+function toScreen(x, y){ const m = V.m; return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]; }
+
+function isDark(){
+  if (cfg.theme === 'dark') return true;
+  if (cfg.theme === 'light') return false;
+  return !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+}
+function readColors(){
+  const cs = getComputedStyle(document.documentElement), g = n => cs.getPropertyValue(n).trim();
+  C = { bg: g('--bg'), ink: g('--ink'), ink2: g('--ink2'), muted: g('--muted'), gas: g('--gas'), liquid: g('--liquid'),
+        nozHi: g('--noz-hi'), nozLo: g('--noz-lo'), nozLine: g('--noz-line'),
+        drop: g('--drop') };
+  if (cfg.color) C.drop = cfg.color;
+  C.pill = C.bg;
+  if (cfg.bg){ C.bg = cfg.bg; if (cfg.bg !== 'transparent') C.pill = cfg.bg; }
+  FONT = cfg.font === 'latex' ? '"Latin Modern Sans", "LM Sans 10", sans-serif' : (g('--font') || 'sans-serif');
+}
+
+/* ------------------------------------------------------------------ drawing (canvas and SVG share the geometry) */
+const TAU = Math.PI * 2;
+function nozzleShape(){
+  /* outline of the injector (world coordinates), upper half mirrored */
+  const r0 = P.r0, L = 3;
+  const up = [[-L, 0.075], [-0.05, 0.075], [-0.004, 0.026], [0, 0.022], [0, r0 * 1.15]];
+  const lo = up.slice().reverse().map(([x, y]) => [x, -y]);
+  return { body: up.concat(lo), bore: [[-L, r0 * 1.15], [0.0005, r0 * 1.15], [0.0005, -r0 * 1.15], [-L, -r0 * 1.15]] };
+}
+function coreShape(){
+  /* intact liquid leaving the orifice: tapers to a point */
+  const pts = [], N = 16, L = P.coreLen, r0 = P.r0;
+  for (let j = 0; j <= N; j++){ const f = j / N; pts.push([f * L, r0 * Math.pow(1 - f, 0.75)]); }
+  const lo = pts.slice().reverse().map(([x, y]) => [x, -y]);
+  return pts.concat(lo);
+}
+/* interpolated positions of the droplets in the slice |z| < slab: [x, y, r, ...] in frame units */
+function dropletList(al){
+  const out = [], minR = 0.6 / V.s, k = cfg.dot, h = P.slab;
+  for (let i = 0; i < D.n; i++){
+    const z = D.z[i];
+    if (z > h || z < -h) continue;
+    out.push(D.px[i] + (D.x[i] - D.px[i]) * al, D.py[i] + (D.y[i] - D.py[i]) * al, Math.max(minR, D.rad[i] * k));
+  }
+  return out;
+}
+/* gas streaks grouped by opacity: [x1, y1, x2, y2, ...] */
+function gasBuckets(al){
+  const NL = 4, B = Array.from({ length: NL }, () => []);
+  const life = P.gasLife * SPS, fade = 0.22;
+  const tail = P.gasTail * SPS;         /* streak length = distance travelled in gasTail seconds */
+  for (let i = 0; i < G.n; i++){
+    const x = G.px[i] + (G.x[i] - G.px[i]) * al, y = G.py[i] + (G.y[i] - G.py[i]) * al;
+    const dx = (G.x[i] - G.px[i]) * tail, dy = (G.y[i] - G.py[i]) * tail;
+    const f = (G.age[i] + al) / life;
+    const a = Math.min(1, f / fade, (1 - f) / fade);
+    if (a <= 0) continue;
+    B[Math.min(NL - 1, Math.floor(a * NL))].push(x - dx, y - dy, x, y);
+  }
+  return B;
+}
+
+let alpha = 0;     /* interpolation between the last two steps */
+function drawCanvas(ctx){
+  const m = V.m;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (C.bg && C.bg !== 'transparent'){ ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H); }
+  ctx.setTransform(dpr * m[0], dpr * m[1], dpr * m[2], dpr * m[3], dpr * m[4], dpr * m[5]);
+  const px = 1 / V.s;
+  if (cfg.gas){
+    const GB = gasBuckets(alpha);
+    ctx.strokeStyle = C.gas; ctx.lineCap = 'round'; ctx.lineWidth = 1.0 * px;
+    GB.forEach((a, q) => {
+      if (!a.length) return;
+      ctx.globalAlpha = 0.5 * (q + 0.5) / GB.length;
+      ctx.beginPath();
+      for (let i = 0; i < a.length; i += 4){ ctx.moveTo(a[i], a[i + 1]); ctx.lineTo(a[i + 2], a[i + 3]); }
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+  }
+  if (cfg.core && cfg.nozzle) fillPoly(ctx, coreShape(), C.drop);
+  const a = dropletList(alpha);
+  ctx.fillStyle = C.drop; ctx.beginPath();
+  /* dots under ~1.4 device pixels in radius: squares of the same area look identical and draw much faster */
+  const small = a.length && a[2] * V.s * dpr < 1.4 && !cfg.breakup && cfg.spread === 0;
+  if (small){ const h = a[2] * 0.886; for (let i = 0; i < a.length; i += 3) ctx.rect(a[i] - h, a[i + 1] - h, 2 * h, 2 * h); }
+  else for (let i = 0; i < a.length; i += 3){ ctx.moveTo(a[i] + a[i + 2], a[i + 1]); ctx.arc(a[i], a[i + 1], a[i + 2], 0, TAU); }
+  ctx.fill();
+  if (cfg.nozzle){
+    const nz = nozzleShape();
+    const gr = ctx.createLinearGradient(0, 0.075, 0, -0.075);
+    gr.addColorStop(0, C.nozLo); gr.addColorStop(0.32, C.nozHi); gr.addColorStop(1, C.nozLo);
+    fillPoly(ctx, nz.body, gr, C.nozLine, 1.2 * px);
+    fillPoly(ctx, nz.bore, C.drop);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawOverlay(CanvasText(ctx));
+}
+function fillPoly(ctx, pts, fill, stroke, lw){
+  ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  if (stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.stroke(); }
+}
+
+/* screen-space overlay: labels, legend, title (renderer-agnostic) */
+const mctx = document.createElement('canvas').getContext('2d');
+function measure(s, size, weight){ mctx.font = `${weight || 400} ${size}px ${FONT}`; return mctx.measureText(s).width; }
+function CanvasText(ctx){
+  return {
+    text(s, x, y, o){
+      ctx.font = `${o.weight || 400} ${o.size}px ${FONT}`; ctx.textAlign = o.align || 'left'; ctx.textBaseline = 'alphabetic';
+      if (o.halo){ ctx.strokeStyle = o.halo; ctx.lineWidth = o.size * 0.3; ctx.lineJoin = 'round'; ctx.globalAlpha = 0.9; ctx.strokeText(s, x, y); ctx.globalAlpha = 1; }
+      ctx.fillStyle = o.color; ctx.fillText(s, x, y);
+    },
+    line(x1, y1, x2, y2, color, lw, a, dash){ ctx.globalAlpha = a == null ? 1 : a; ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; },
+    dots(pts, r, color){ ctx.fillStyle = color; ctx.beginPath(); for (let i = 0; i < pts.length; i += 2){ ctx.moveTo(pts[i] + r, pts[i + 1]); ctx.arc(pts[i], pts[i + 1], r, 0, TAU); } ctx.fill(); }
+  };
+}
+/* the three regimes along the axis, in frame units from the nozzle tip (0) to the far edge (xvis) */
+function zoneList(){
+  const L = V.xvis, [f1, f2] = cfg.zones;
+  return [
+    { a: 0, b: f1 * L, main: cfg.thick, sub: cfg.thicksub, spacing: 0.34 },
+    { a: f1 * L, b: f2 * L, main: cfg.thin, sub: cfg.thinsub, spacing: 0.85 },
+    { a: f2 * L, b: L, main: cfg.vthin, sub: cfg.vthinsub, spacing: 2.0 }
+  ];
+}
+/* a row of dots with a given spacing, centred on the segment p–q */
+function dotRow(p, q, spacing){
+  const len = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.max(1, Math.floor(len / spacing) + 1);
+  const used = (n - 1) * spacing, off = (len - used) / 2, ux = (q[0] - p[0]) / (len || 1), uy = (q[1] - p[1]) / (len || 1);
+  const out = []; for (let j = 0; j < n; j++){ const d = off + j * spacing; out.push(p[0] + ux * d, p[1] + uy * d); }
+  return out;
+}
+function drawOverlay(R){
+  const fs = V.fs, pad = fs * 0.8, halo = C.bg && C.bg !== 'transparent' ? C.bg : null;
+  if (cfg.title) R.text(cfg.title, pad, pad + fs * 1.0, { size: fs * 1.05, weight: 600, color: C.ink, halo });
+  if (cfg.labels){
+    /* each regime: its name, and under it a row of identical dots whose spacing grows from
+       "thick" to "very thin", the way the droplets themselves spread apart */
+    const s1 = fs * 1.1, s2 = fs * 0.72, dr = Math.max(1.1, fs * 0.08), gap = fs * 0.55;
+    const top = pad + (cfg.title && V.horiz ? fs * 1.8 : 0);
+    const ruleY = top + s1 * 0.8 + fs * 0.62 + (cfg.thicksub || cfg.thinsub || cfg.vthinsub ? fs * 0.95 : 0);
+    if (cfg.bounds){
+      /* faint dashed lines where the regime changes (the change is gradual, so they stay discreet) */
+      const zl = zoneList(), dash = [fs * 0.12, fs * 0.42];
+      for (let j = 1; j < zl.length; j++){
+        const [bx, by] = toScreen(zl[j].a, 0);
+        if (V.horiz) R.line(bx, ruleY - fs * 0.25, bx, H - pad, C.ink2, Math.max(1, fs * 0.045), 0.35, dash);
+        else R.line(W - pad - fs * 0.25, by, pad, by, C.ink2, Math.max(1, fs * 0.045), 0.35, dash);
+      }
+    }
+    for (const z of zoneList()){
+      const P0 = toScreen(z.a, 0), P1 = toScreen(z.b, 0);
+      if (V.horiz){
+        let x1 = Math.max(pad, Math.min(P0[0], P1[0])), x2 = Math.min(W - pad, Math.max(P0[0], P1[0]));
+        if (x2 - x1 < fs * 2) continue;
+        x1 += gap; x2 -= gap;
+        const cx = (x1 + x2) / 2, yb = top + s1 * 0.8;
+        R.text(z.main, cx, yb, { size: s1, weight: 600, color: C.ink, align: 'center', halo });
+        let yl = yb + fs * 0.62;
+        if (z.sub){ R.text(z.sub, cx, yb + fs * 0.95, { size: s2, color: C.ink2, align: 'center', halo }); yl += fs * 0.95; }
+        R.dots(dotRow([x1, yl], [x2, yl], z.spacing * fs), dr, C.drop);
+      } else {
+        let y1 = Math.max(pad, Math.min(P0[1], P1[1])), y2 = Math.min(H - pad, Math.max(P0[1], P1[1]));
+        if (y2 - y1 < fs * 2) continue;
+        y1 += gap; y2 -= gap;
+        const xr = W - pad - dr, cy = (y1 + y2) / 2, xt = xr - fs * 0.7;
+        R.dots(dotRow([xr, y1], [xr, y2], z.spacing * fs), dr, C.drop);
+        const hh = z.sub ? fs * 0.95 : 0;
+        R.text(z.main, xt, cy + s1 * 0.35 - hh / 2, { size: s1, weight: 600, color: C.ink, align: 'right', halo });
+        if (z.sub) R.text(z.sub, xt, cy + s1 * 0.35 + hh / 2, { size: s2, color: C.ink2, align: 'right', halo });
+      }
+    }
+  }
+  if (cfg.legend){
+    const ly = H - pad - fs * 0.25, ks = fs * 0.8, sw = fs * 1.0, cy = ly - ks * 0.33;
+    let x = pad;
+    const cl = [[0.15, 0.05], [0.4, -0.12], [0.55, 0.16], [0.8, -0.02], [0.3, 0.2], [0.95, 0.14], [0.7, -0.2]].flatMap(([ox, oy]) => [x + sw * ox, cy + fs * oy]);
+    R.dots(cl, Math.max(0.8, fs * 0.06), C.drop);
+    x += sw + fs * 0.4; R.text(cfg.ldrop, x, ly, { size: ks, color: C.ink2, halo }); x += measure(cfg.ldrop, ks, 400) + fs * 1.2;
+    R.line(x, cy + fs * 0.12, x + sw * 1.4, cy - fs * 0.12, C.gas, Math.max(1, fs * 0.06), 0.8);
+    R.line(x + sw * 0.2, cy + fs * 0.32, x + sw * 0.9, cy + fs * 0.2, C.gas, Math.max(1, fs * 0.06), 0.5);
+    x += sw * 1.4 + fs * 0.4; R.text(cfg.lgas, x, ly, { size: ks, color: C.ink2, halo });
+  }
+}
+
+/* SVG export of the current frame */
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function buildSvg(){
+  const f = v => Math.round(v * 1e5) / 1e5, fp = v => Math.round(v * 100) / 100, m = V.m, px = 1 / V.s;
+  const out = [];
+  const poly = (pts, attrs) => out.push(`<path d="M${pts.map(p => f(p[0]) + ' ' + f(p[1])).join('L')}Z" ${attrs}/>`);
+  if (C.bg && C.bg !== 'transparent') out.push(`<rect width="${W}" height="${H}" fill="${C.bg}"/>`);
+  out.push(`<defs><linearGradient id="nz" gradientUnits="userSpaceOnUse" x1="0" y1="0.075" x2="0" y2="-0.075"><stop offset="0" stop-color="${C.nozLo}"/><stop offset="0.32" stop-color="${C.nozHi}"/><stop offset="1" stop-color="${C.nozLo}"/></linearGradient><clipPath id="vw"><rect width="${W}" height="${H}"/></clipPath></defs>`);
+  out.push(`<g clip-path="url(#vw)"><g transform="matrix(${m.map(v => fp(v)).join(' ')})">`);
+  if (cfg.gas){
+    gasBuckets(alpha).forEach((a, q, all) => {
+      if (!a.length) return;
+      let d = ''; for (let i = 0; i < a.length; i += 4) d += `M${f(a[i])} ${f(a[i + 1])}L${f(a[i + 2])} ${f(a[i + 3])}`;
+      out.push(`<path d="${d}" fill="none" stroke="${C.gas}" stroke-width="${f(1.0 * px)}" stroke-linecap="round" stroke-opacity="${fp(0.5 * (q + 0.5) / all.length)}"/>`);
+    });
+  }
+  if (cfg.core && cfg.nozzle) poly(coreShape(), `fill="${C.drop}"`);
+  {
+    const a = dropletList(alpha);
+    out.push(`<g fill="${C.drop}">`);
+    for (let i = 0; i < a.length; i += 3) out.push(`<circle cx="${f(a[i])}" cy="${f(a[i + 1])}" r="${f(a[i + 2])}"/>`);
+    out.push('</g>');
+  }
+  if (cfg.nozzle){
+    const nz = nozzleShape();
+    poly(nz.body, `fill="url(#nz)" stroke="${C.nozLine}" stroke-width="${f(1.2 * px)}" stroke-linejoin="round"`);
+    poly(nz.bore, `fill="${C.drop}"`);
+  }
+  out.push('</g>');
+  drawOverlay({
+    text(s, x, y, o){ const an = o.align === 'center' ? 'middle' : o.align === 'right' ? 'end' : 'start'; out.push(`<text x="${fp(x)}" y="${fp(y)}" font-family="${esc(FONT)}" font-size="${fp(o.size)}" font-weight="${o.weight || 400}" fill="${o.color}" text-anchor="${an}"${o.halo ? ` stroke="${o.halo}" stroke-opacity="0.9" stroke-width="${fp(o.size * 0.3)}" stroke-linejoin="round" paint-order="stroke"` : ''}>${esc(s)}</text>`); },
+    line(x1, y1, x2, y2, color, lw, a, dash){ out.push(`<line x1="${fp(x1)}" y1="${fp(y1)}" x2="${fp(x2)}" y2="${fp(y2)}" stroke="${color}" stroke-width="${fp(lw)}" stroke-linecap="round"${a != null && a < 1 ? ` stroke-opacity="${a}"` : ''}${dash ? ` stroke-dasharray="${dash.map(fp).join(' ')}"` : ''}/>`); },
+    dots(pts, r, color){ out.push(`<g fill="${color}">` + Array.from({ length: pts.length / 2 }, (_, i) => `<circle cx="${fp(pts[2 * i])}" cy="${fp(pts[2 * i + 1])}" r="${fp(r)}"/>`).join('') + '</g>'); }
+  });
+  out.push('</g>');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">\n${out.join('\n')}\n</svg>\n`;
+}
+
+/* ------------------------------------------------------------------ plumbing */
+const $ = id => document.getElementById(id);
+const stage = $('stage'), canvas = $('cv'), ctx = canvas.getContext('2d');
+let running = false, visible = true, lastNow = 0, acc = 0, sinceStart = 0, wasHidden = false;
+function warmStart(){ stepTo(Math.round(cfg.period * SPS * Math.ceil((P.maxAge + 2) / cfg.period))); }
+function reset(warm){
+  build(); acc = 0; alpha = 0; sinceStart = 0;
+  if (warm) warmStart();
+  render();
+}
+function resize(){
+  const r = stage.getBoundingClientRect();
+  W = Math.max(50, Math.round(r.width)); H = Math.max(50, Math.round(r.height));
+  dpr = cfg.dpr || Math.min(3, window.devicePixelRatio || 1);
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  const first = !V;
+  V = computeView();
+  if (first) reset(cfg.warm); else render();
+}
+function render(){ if (V && D) drawCanvas(ctx); }
+function frame(now){
+  if (!running) return;
+  const dtw = Math.min(0.1, Math.max(0, (now - lastNow) / 1000)); lastNow = now;
+  if (visible && !document.hidden){
+    acc += dtw * cfg.speed; sinceStart += dtw;
+    let guard = 0;
+    while (acc >= DT && guard++ < 60){ step(); acc -= DT; }
+    if (acc >= DT) acc = 0;
+    alpha = acc / DT;
+    if (cfg.replay > 0 && sinceStart >= cfg.replay) reset(false);
+    render();
+  }
+  requestAnimationFrame(frame);
+}
+const ICON_PAUSE = '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3" width="3" height="10" rx="0.8"/><rect x="9.5" y="3" width="3" height="10" rx="0.8"/></svg>';
+const ICON_PLAY = '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8.2-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5z"/></svg>';
+function setRunning(on){
+  running = on;
+  const b = $('bPlay');
+  b.innerHTML = on ? ICON_PAUSE + ' Pause' : ICON_PLAY + ' Play';
+  b.setAttribute('aria-label', on ? 'Pause' : 'Play');
+  if (on && !cfg.record){ lastNow = performance.now(); requestAnimationFrame(frame); }
+}
+
+/* ------------------------------------------------------------------ controls */
+function currentParams(extra){
+  const p = new URLSearchParams();
+  const put = (k, v, d) => { if (v !== d) p.set(k, typeof v === 'boolean' ? (v ? 1 : 0) : v); };
+  put('rate', cfg.rate, DEF.rate); put('angle', cfg.angle, DEF.angle); put('spread', cfg.spread, DEF.spread);
+  put('dot', cfg.dot, DEF.dot); if (cfg.color) p.set('color', cfg.color.replace('#', '')); put('seed', cfg.seed, DEF.seed); put('speed', cfg.speed, DEF.speed);
+  put('period', cfg.period, DEF.period); put('dir', cfg.dir, DEF.dir);
+  put('gas', cfg.gas, true); put('breakup', cfg.breakup, false); put('core', cfg.core, true); put('nozzle', cfg.nozzle, true); put('labels', cfg.labels, true);
+  for (const k of ['thick', 'thin', 'vthin', 'thicksub', 'thinsub', 'vthinsub', 'ldrop', 'lgas']) put(k, cfg[k], DEF[k]);
+  if (cfg.zones.join(',') !== DEF.zones.join(',')) p.set('zones', cfg.zones.join(','));
+  put('legend', cfg.legend, false); put('bounds', cfg.bounds, true);
+  put('title', cfg.title, '');
+  if (Q.has('warm') || cfg.warm) put('warm', cfg.warm, false);
+  put('replay', cfg.replay, 0); put('onshow', cfg.onshow, 'resume');
+  put('theme', cfg.theme, 'auto'); put('scale', cfg.scale, 1); put('font', cfg.font, 'system');
+  if (cfg.bg) p.set('bg', cfg.bg);
+  if (Q.has('autoplay')) put('autoplay', cfg.autoplay, true);
+  if (extra) for (const [k, v] of Object.entries(extra)) p.set(k, v);
+  return p.toString();
+}
+function fillSettings(){
+  $('iRate').value = cfg.rate; $('iAngle').value = cfg.angle; $('iColor').value = toHex(C.drop); $('iDot').value = cfg.dot;
+  $('iSeed').value = cfg.seed; $('iDir').value = cfg.dir; $('iCore').checked = cfg.core; $('iWarm').checked = !!cfg.warm;
+  $('eSettings').textContent = '';
+}
+function toHex(c){ mctx.fillStyle = '#000'; mctx.fillStyle = c; const v = mctx.fillStyle; return /^#[0-9a-f]{6}$/i.test(v) ? v : '#174a8c'; }
+function syncUrl(){ try { const p = currentParams(); history.replaceState(null, '', location.pathname + (p ? '?' + p : '') + location.hash); } catch (e){} }
+function applySettings(){
+  const rate = Math.round(parseFloat($('iRate').value)), angle = parseFloat($('iAngle').value), spread = cfg.spread;
+  const dot = parseFloat($('iDot').value), seed = Math.round(parseFloat($('iSeed').value));
+  const err = !(rate >= 50 && rate <= 40000) ? 'Droplets per second: between 50 and 40000.' : !(angle >= 2 && angle <= 35) ? 'Cone half-angle: between 2° and 35°.'
+            : !(spread >= 0 && spread <= 0.8) ? 'Size spread: between 0 and 0.8.' : !(dot >= 0.2 && dot <= 5) ? 'Droplet size: between 0.2 and 5.'
+            : !(seed >= 0) ? 'Seed: a non-negative integer.' : '';
+  if (err){ $('eSettings').textContent = err; return false; }
+  const physics = rate !== cfg.rate || angle !== cfg.angle || spread !== cfg.spread || seed !== cfg.seed || $('iWarm').checked !== !!cfg.warm;
+  const dirCh = $('iDir').value !== cfg.dir;
+  const col = $('iColor').value;
+  Object.assign(cfg, { rate, angle, spread, dot, seed, dir: $('iDir').value, core: $('iCore').checked, warm: $('iWarm').checked });
+  if (col.toLowerCase() !== toHex(C.drop).toLowerCase()){ cfg.color = col; readColors(); }
+  if (dirCh) V = computeView();
+  if (physics || dirCh) reset(cfg.warm); else render();
+  syncUrl();
+  if (!running) setRunning(true);
+  return true;
+}
+function embedCode(){
+  const q = currentParams($('cEmbCtl').checked ? null : { controls: 0 });
+  const src = (location.protocol === 'file:' || location.protocol === 'blob:' ? 'spray.html' : location.origin + location.pathname) + (q ? '?' + q : '');
+  const ar = V.horiz ? '16/9' : '3/4';
+  return `<iframe src="${esc(src)}"\n        title="Spray leaving a nozzle"\n        loading="lazy" allowfullscreen\n        style="width:100%;aspect-ratio:${ar};border:0"></iframe>`;
+}
+function togglePop(id, btn){
+  const el = $(id), open = !el.classList.contains('open');
+  document.querySelectorAll('.pop.open').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('#bar [aria-expanded]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  if (open){ el.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
+  return open;
+}
+function download(name, blob){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function toggleFull(){
+  const el = document.documentElement;
+  try { if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen(); } catch (e){}
+}
+function wire(){
+  if (!cfg.controls || cfg.record) $('bar').hidden = true;
+  $('sSpeed').value = String(cfg.speed);
+  if ($('sSpeed').value !== String(cfg.speed)){ const o = document.createElement('option'); o.value = o.textContent = String(cfg.speed); $('sSpeed').appendChild(o); $('sSpeed').value = String(cfg.speed); }
+  $('cGas').checked = cfg.gas; $('cLabels').checked = cfg.labels;
+  $('bPlay').onclick = () => setRunning(!running);
+  $('bReset').onclick = () => { reset(false); if (!running) setRunning(true); };
+  $('sSpeed').onchange = e => { cfg.speed = parseFloat(e.target.value); syncUrl(); };
+  $('cGas').onchange = e => { cfg.gas = e.target.checked; render(); syncUrl(); };
+  $('cLabels').onchange = e => { cfg.labels = e.target.checked; render(); syncUrl(); };
+  $('bSettings').onclick = e => { if (togglePop('pSettings', e.currentTarget)) fillSettings(); };
+  $('bApply').onclick = () => { if (applySettings()) togglePop('pSettings', $('bSettings')); };
+  $('bRandom').onclick = () => { $('iSeed').value = Math.floor(Math.random() * 1e6); applySettings(); };
+  $('bEmbed').onclick = e => { if (togglePop('pEmbed', e.currentTarget)) $('tEmbed').value = embedCode(); };
+  $('cEmbCtl').onchange = () => { $('tEmbed').value = embedCode(); };
+  $('bCopy').onclick = async () => { const t = $('tEmbed'); try { await navigator.clipboard.writeText(t.value); } catch (e){ t.select(); document.execCommand && document.execCommand('copy'); } $('bCopy').textContent = 'Copied'; setTimeout(() => $('bCopy').textContent = 'Copy', 1400); };
+  $('bSvg').onclick = () => download('spray.svg', new Blob([buildSvg()], { type: 'image/svg+xml' }));
+  $('bPng').onclick = () => canvas.toBlob(b => b && download('spray.png', b), 'image/png');
+  $('bFull').onclick = toggleFull;
+  canvas.addEventListener('click', () => { if (!cfg.controls) setRunning(!running); });
+  document.addEventListener('keydown', e => {
+    const tg = (e.target && e.target.tagName) || '';
+    if (/INPUT|TEXTAREA|SELECT/.test(tg)) return;
+    if (e.key === ' ' || e.code === 'Space'){ e.preventDefault(); setRunning(!running); }
+    else if (e.key === 'r' || e.key === 'R'){ reset(false); if (!running) setRunning(true); }
+    else if (e.key === 'f' || e.key === 'F') toggleFull();
+    else if (e.key === 'Escape') document.querySelectorAll('.pop.open').forEach(p => p.classList.remove('open'));
+  });
+  window.addEventListener('message', e => {
+    const d = e.data, cmd = typeof d === 'string' ? d : d && (d.cmd || d.spray);
+    if (cmd === 'restart'){ reset(false); if (!running) setRunning(true); }
+    else if (cmd === 'play') setRunning(true);
+    else if (cmd === 'pause') setRunning(false);
+  });
+  const onShow = () => { if (cfg.onshow === 'restart' && wasHidden){ reset(false); } wasHidden = false; };
+  if ('IntersectionObserver' in window) new IntersectionObserver(es => {
+    const v = es.some(x => x.isIntersecting);
+    if (!v) wasHidden = true; else if (!visible) onShow();
+    visible = v;
+  }).observe(stage);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) wasHidden = true; else onShow(); });
+  if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); render(); });
+  new ResizeObserver(() => resize()).observe(stage);
+}
+
+/* ------------------------------------------------------------------ boot */
+readColors();
+wire();
+resize();
+setRunning(!cfg.record && cfg.autoplay);
+
+/* scripting / recording hook: SPRAY.seek(t) shows the state at time t (s) exactly */
+window.SPRAY = {
+  cfg, P, DT,
+  get view(){ return V; },
+  get t(){ return (S.n - 1 + alpha) * DT; },
+  seek(t){
+    const k = Math.floor(t * SPS + 1e-7), nT = k + 1;
+    if (nT < S.n){ build(); }
+    stepTo(nT); alpha = t * SPS - k; if (alpha < 1e-7) alpha = 0;
+    render(); return (S.n - 1 + alpha) * DT;
+  },
+  reset, render, resize, png: () => canvas.toDataURL('image/png'), svg: buildSvg,
+  snapshot(){
+    const o = { n: D.n, x: [], y: [], z: [], vx: [], d: [] };
+    for (let i = 0; i < D.n; i++){ o.x.push(D.x[i]); o.y.push(D.y[i]); o.z.push(D.z[i]); o.vx.push(D.vx[i]); o.d.push(D.d[i]); }
+    o.gas = G.n; return o;
+  },
+  ready: true
+};
+})();
+</script>
+</body>
+</html>

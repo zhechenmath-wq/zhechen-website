@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hard-Disk Size Demo</title>
+<meta name="description" content="Exact event-driven simulation of N hard disks in a periodic square with the same initial data and packing fractions 0.2%, 2%, 20%: collisions and the trajectory of a tagged particle.">
+<!--
+  Hard disks: how the size of the particles changes the dynamics
+  --------------------------------------------------------------
+  Self-contained, no dependencies. Embed with:
+    <iframe src="hard-disks.html" title="Hard-disk simulation" loading="lazy"
+            style="width:100%;aspect-ratio:12/5;border:0" allowfullscreen></iframe>
+
+  Model: N hard disks of diameter ε in the periodic unit square (2D torus Λ, |Λ| = 1), unit
+  masses, elastic collisions, exact event-driven dynamics. Every disk starts with speed 1 in a
+  random direction (antipodal pairs, so the total momentum is 0); positions are the same in every
+  panel. Packing fraction φ = Nπε²/(4|Λ|). Under each panel: number of collisions so far and the
+  kinetic-theory mean free path λ = <|v|>/ν, ν = 2nε<|v − v*|>χ(φ) (Enskog, Henderson's χ).
+
+  URL parameters (all optional):
+    N=200            number of disks (same in every panel)
+    phi=0.2,2,20     packing fractions in percent (1 to 4 panels); ε = sqrt(4φ/(Nπ))
+    d=0.01,0.03      explicit diameters instead of phi
+    seed=3           random seed for the shared initial data
+    speed=0.5        simulated time units per second
+    tmax=12          length of the run before it loops
+    loop=1           restart after tmax (0 = stop)
+    trail=3          tagged-particle trail length in time units ("all" = whole path, 0 = off)
+    title=1          header title (0 = off, or any custom text)
+    controls=1       control bar (0 = bare animation, e.g. for slides)
+    autoplay=1       start playing (default: on unless the viewer prefers reduced motion)
+    theme=auto|light|dark
+    scale=1          text size multiplier
+    font=system|latex   "latex" uses Latin Modern (needs the font installed locally)
+    bg=#ffffff|transparent
+
+  Keyboard: Space play/pause · R reset · → step (when paused) · F fullscreen
+-->
+<style>
+:root{
+  color-scheme: light;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --bg:#ffffff; --panel:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#7a7872;
+  --grid:#e7e6e0; --axis:#c3c2b7; --disk:#9c9a92; --tag:#eb6834; --ref:#898781;
+  --ctl:#f4f3ef; --ctl-hover:#e9e8e3; --ctl-bd:rgba(11,11,11,.14); --focus:#2a78d6;
+  --tip:#ffffff; --shadow:0 4px 18px rgba(0,0,0,.12);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#121211; --panel:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#8f8d86;
+    --grid:#2a2a28; --axis:#46463f; --disk:#8a8983; --tag:#ee7a44; --ref:#8f8d86;
+    --ctl:#1f1f1d; --ctl-hover:#2b2b28; --ctl-bd:rgba(255,255,255,.14); --focus:#3987e5;
+    --tip:#232321; --shadow:0 4px 18px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#121211; --panel:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#8f8d86;
+  --grid:#2a2a28; --axis:#46463f; --disk:#8a8983; --tag:#ee7a44; --ref:#8f8d86;
+  --ctl:#1f1f1d; --ctl-hover:#2b2b28; --ctl-bd:rgba(255,255,255,.14); --focus:#3987e5;
+  --tip:#232321; --shadow:0 4px 18px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--font)}
+body.transparent{background:transparent}
+#app{display:flex;flex-direction:column;height:100%;min-height:200px}
+#stage{position:relative;flex:1 1 auto;min-height:0;overflow:hidden}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:manipulation}
+#bar{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:7px 10px;
+  border-top:1px solid var(--ctl-bd);font:13px/1.2 var(--font);position:relative}
+#bar[hidden]{display:none}
+#bar button,#bar select,.pop input,.pop select,.pop button,.pop textarea{
+  font:inherit;color:var(--ink);background:var(--ctl);border:1px solid var(--ctl-bd);
+  border-radius:6px;padding:5px 9px;min-height:30px}
+#bar button{display:inline-flex;align-items:center;gap:6px}
+#bar button:hover,.pop button:hover{background:var(--ctl-hover);cursor:pointer}
+#bar :focus-visible,.pop :focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+#bar .grow{flex:1 1 auto}
+#bar label{display:inline-flex;align-items:center;gap:6px;color:var(--ink2)}
+#bar .ico{width:14px;height:14px;vertical-align:-2px;fill:currentColor}
+.pop{position:absolute;right:10px;bottom:calc(100% + 6px);width:min(360px,calc(100vw - 20px));
+  background:var(--tip);border:1px solid var(--ctl-bd);border-radius:10px;box-shadow:var(--shadow);
+  padding:12px;display:none;z-index:10;font:13px/1.35 var(--font)}
+.pop.open{display:block}
+.pop h3{margin:0 0 8px;font-size:13px;font-weight:600}
+.pop .g{display:grid;grid-template-columns:auto 1fr;gap:7px 10px;align-items:center}
+.pop .g label{color:var(--ink2)}
+.pop input[type=text],.pop input[type=number],.pop select{width:100%}
+.pop input[type=checkbox]{min-height:0;width:16px;height:16px;accent-color:var(--focus)}
+.pop .row{display:flex;gap:6px;margin-top:10px;justify-content:flex-end}
+.pop textarea{width:100%;height:92px;resize:vertical;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.pop .note{color:var(--muted);font-size:12px;margin-top:6px}
+.pop .err{color:#d03b3b;font-size:12px;margin-top:6px;min-height:1em}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="cv" role="img" aria-label="Animation of hard disks in three periodic boxes with different diameters"></canvas>
+  </div>
+  <div id="bar">
+    <button id="bPlay" type="button" aria-label="Pause"></button>
+    <button id="bReset" type="button" aria-label="Restart from t = 0"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5a5.5 5.5 0 1 1-5.2 7.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M2.2 2.6v4.1h4.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Reset</button>
+    <label>Speed
+      <select id="sSpeed" aria-label="Playback speed">
+        <option value="0.125">0.125</option><option value="0.25">0.25</option><option value="0.5">0.5</option>
+        <option value="1">1</option><option value="2">2</option><option value="4">4</option>
+      </select>
+    </label>
+    <span class="grow"></span>
+    <button id="bSettings" type="button" aria-expanded="false" aria-controls="pSettings">Settings</button>
+    <button id="bEmbed" type="button" aria-expanded="false" aria-controls="pEmbed">Embed</button>
+    <button id="bSvg" type="button" title="Download the current frame as SVG">SVG</button>
+    <button id="bPng" type="button" title="Download the current frame as PNG">PNG</button>
+    <button id="bFull" type="button" title="Fullscreen (F)" aria-label="Fullscreen"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+
+    <div class="pop" id="pSettings" role="dialog" aria-label="Simulation settings">
+      <h3>Simulation</h3>
+      <div class="g">
+        <label for="iN">Particles N</label><input id="iN" type="number" min="10" max="1000" step="1" title="Above ~500 the densest case may not keep up in real time">
+        <label for="iPhi">Packing fractions φ (%)</label><input id="iPhi" type="text" spellcheck="false" placeholder="0.2, 2, 20">
+        <label for="iSeed">Seed</label><input id="iSeed" type="number" min="0" step="1">
+        <label for="iTmax">Loop length</label><input id="iTmax" type="number" min="0.5" step="0.5">
+        <label for="iTrail">Trail length</label>
+        <select id="iTrail"><option value="0">off</option><option value="1">1</option><option value="3">3</option><option value="6">6</option><option value="all">whole path</option></select>
+        <label for="iLoop">Loop</label><input id="iLoop" type="checkbox">
+      </div>
+      <div class="err" id="eSettings" aria-live="polite"></div>
+      <div class="row">
+        <button id="bRandom" type="button">New seed</button>
+        <button id="bApply" type="button">Apply</button>
+      </div>
+      <div class="note">Periodic unit square, unit masses, all initial speeds 1. Up to 4 packing fractions; ε = (4φ/Nπ)<sup>1/2</sup>.</div>
+    </div>
+
+    <div class="pop" id="pEmbed" role="dialog" aria-label="Embed code">
+      <h3>Embed this view</h3>
+      <textarea id="tEmbed" readonly aria-label="iframe embed code"></textarea>
+      <div class="note">Uses the current settings. Replace the address with the one where you host this file.</div>
+      <div class="row"><button id="bCopy" type="button">Copy</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ==================================================================
+   Hard disks in the periodic unit square: exact event-driven dynamics
+   ================================================================== */
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* Initial data shared by every panel.
+   Positions: random sequential addition on the torus with exclusion distance 1.01*dmax,
+   so the configuration is admissible for every diameter <= dmax.
+   Velocities: all of speed 1 with random directions; directions come in antipodal pairs
+   (theta, theta + pi) assigned to random particles, so the total momentum is exactly 0.
+   Particle 0 (tagged) is moved to the centre by a global periodic shift. */
+function makeInit(N, dmax, seed){
+  if (dmax >= 0.5) throw new Error('Diameter must be below half the box side.');
+  const phi = N * Math.PI * dmax * dmax / 4;
+  if (phi > 0.45) throw new Error('Too dense: packing fraction ' + phi.toFixed(2) + ' (max 0.45 here).');
+  const rnd = mulberry32((seed * 2654435761) ^ 0x5bd1e995);
+  const gap = dmax * 1.01, g2 = gap * gap;
+  const nc = Math.max(1, Math.min(256, Math.floor(1 / Math.max(gap, 1e-9))));
+  const cells = new Map();
+  const cellOf = v => { const c = Math.floor((v - Math.floor(v)) * nc); return c >= nc ? nc - 1 : c; };
+  const xs = [], ys = [];
+  const free = (x, y) => {
+    if (gap <= 0) return true;
+    const cx = cellOf(x), cy = cellOf(y);
+    const R = nc < 3 ? null : [-1, 0, 1];
+    const test = k => { let dx = xs[k] - x, dy = ys[k] - y; dx -= Math.round(dx); dy -= Math.round(dy); return dx * dx + dy * dy >= g2; };
+    if (!R){ for (let k = 0; k < xs.length; k++) if (!test(k)) return false; return true; }
+    for (const a of R) for (const b of R){
+      const arr = cells.get(((cx + a + nc) % nc) * nc + ((cy + b + nc) % nc));
+      if (arr) for (const k of arr) if (!test(k)) return false;
+    }
+    return true;
+  };
+  const add = (x, y) => { const key = cellOf(x) * nc + cellOf(y); let a = cells.get(key); if (!a){ a = []; cells.set(key, a); } a.push(xs.length); xs.push(x); ys.push(y); };
+  let tries = 0; const maxTries = 2000 * N + 100000;
+  while (xs.length < N && tries < maxTries){ tries++; const x = rnd(), y = rnd(); if (free(x, y)) add(x, y); }
+  if (xs.length < N) throw new Error('Could not place the disks without overlap; lower N or the diameters.');
+  const x = Float64Array.from(xs), y = Float64Array.from(ys);
+  /* tagged particle: closest to the centre, then shift everything so it sits at the centre */
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < N; i++){ let dx = x[i] - .5, dy = y[i] - .5; dx -= Math.round(dx); dy -= Math.round(dy); const d2 = dx * dx + dy * dy; if (d2 < bd){ bd = d2; best = i; } }
+  const sw = (a, i, j) => { const t = a[i]; a[i] = a[j]; a[j] = t; };
+  sw(x, 0, best); sw(y, 0, best);
+  const sx = .5 - x[0], sy = .5 - y[0];
+  for (let i = 0; i < N; i++){ x[i] += sx; y[i] += sy; x[i] -= Math.floor(x[i]); y[i] -= Math.floor(y[i]); }
+  /* unit speeds, antipodal pairs, randomly assigned */
+  const vx = new Float64Array(N), vy = new Float64Array(N);
+  const perm = Array.from({ length: N }, (_, i) => i);
+  for (let i = N - 1; i > 0; i--){ const j = Math.floor(rnd() * (i + 1)); const t = perm[i]; perm[i] = perm[j]; perm[j] = t; }
+  for (let k = 0; k + 1 < N; k += 2){
+    const th = 2 * Math.PI * rnd();
+    vx[perm[k]] = Math.cos(th); vy[perm[k]] = Math.sin(th);
+    vx[perm[k + 1]] = -Math.cos(th); vy[perm[k + 1]] = -Math.sin(th);
+  }
+  if (N % 2){ vx[perm[N - 1]] = 0; vy[perm[N - 1]] = 0; }
+  if (vx[0] === 0 && vy[0] === 0 && N > 1){ sw(vx, 0, 1); sw(vy, 0, 1); }
+  return { N, x, y, vx, vy };
+}
+
+/* Event-driven dynamics on the torus. Coordinates are kept UNWRAPPED; pair distances use the
+   minimum image. A min-image prediction is exact while the relative displacement stays below
+   1/2 - d, so every prediction of disk i is limited to a horizon h_i = (1/2 - d)/(|v_i| + vmax);
+   at the horizon, i is simply re-predicted. After a collision only the two disks and the disks
+   that had scheduled an event with them are re-predicted. */
+class Sim {
+  constructor(init, d){
+    const N = init.N;
+    this.N = N; this.d = d;
+    this.x = Float64Array.from(init.x); this.y = Float64Array.from(init.y);
+    this.vx = Float64Array.from(init.vx); this.vy = Float64Array.from(init.vy);
+    this.t = 0; this.coll = 0; this.horizons = 0;
+    this.et = new Float64Array(N).fill(Infinity);
+    this.ep = new Int32Array(N).fill(-3);
+    this.vmax = 0; this.updateVmax();
+    this.trail = [{ x: this.x[0], y: this.y[0], t: 0, k: 0 }];
+    for (let i = 0; i < N; i++) this.predict(i);
+  }
+  updateVmax(){
+    let m = 0; for (let i = 0; i < this.N; i++){ const s = this.vx[i] ** 2 + this.vy[i] ** 2; if (s > m) m = s; }
+    this.vmax = Math.sqrt(m);
+  }
+  pairDt(i, j){
+    let dx = this.x[j] - this.x[i], dy = this.y[j] - this.y[i];
+    dx -= Math.round(dx); dy -= Math.round(dy);
+    const dvx = this.vx[j] - this.vx[i], dvy = this.vy[j] - this.vy[i];
+    const b = dx * dvx + dy * dvy;
+    if (b >= 0) return Infinity;
+    const v2 = dvx * dvx + dvy * dvy;
+    const c = dx * dx + dy * dy - this.d * this.d;
+    const disc = b * b - v2 * c;
+    if (disc <= 0) return Infinity;
+    const dt = c / (-b + Math.sqrt(disc));
+    return dt > 0 ? dt : 0;
+  }
+  predict(i){
+    if (!(this.d > 0)){ this.et[i] = Infinity; this.ep[i] = -3; return; }
+    const sp = Math.sqrt(this.vx[i] ** 2 + this.vy[i] ** 2);
+    const h = 0.999 * (0.5 - this.d) / (sp + this.vmax + 1e-12);
+    let best = h, bp = -4;
+    const t0 = this.t, et = this.et, ep = this.ep;
+    for (let j = 0; j < this.N; j++){
+      if (j === i) continue;
+      const tj = this.pairDt(i, j);
+      if (tj > h) continue;
+      if (tj < best){ best = tj; bp = j; }
+      const at = t0 + tj;
+      if (at < et[j]){ et[j] = at; ep[j] = i; }
+    }
+    et[i] = t0 + best; ep[i] = bp;
+  }
+  drift(dt){
+    if (dt <= 0) return;
+    const x = this.x, y = this.y, vx = this.vx, vy = this.vy;
+    for (let i = 0; i < this.N; i++){ x[i] += vx[i] * dt; y[i] += vy[i] * dt; }
+  }
+  advanceTo(T){
+    const N = this.N, et = this.et, ep = this.ep;
+    let guard = 0;
+    for (;;){
+      let m = -1, tm = Infinity;
+      for (let i = 0; i < N; i++) if (et[i] < tm){ tm = et[i]; m = i; }
+      if (m < 0 || tm > T){ this.drift(T - this.t); this.t = T; return; }
+      this.drift(tm - this.t); this.t = tm;
+      const p = ep[m];
+      if (p >= 0){
+        let dx = this.x[p] - this.x[m], dy = this.y[p] - this.y[m];
+        dx -= Math.round(dx); dy -= Math.round(dy);
+        const r = Math.sqrt(dx * dx + dy * dy) || 1e-300;
+        const nx = dx / r, ny = dy / r;
+        const dvn = (this.vx[m] - this.vx[p]) * nx + (this.vy[m] - this.vy[p]) * ny;
+        if (dvn > 0){
+          this.vx[m] -= dvn * nx; this.vy[m] -= dvn * ny;
+          this.vx[p] += dvn * nx; this.vy[p] += dvn * ny;
+          this.coll++;
+          const s1 = Math.hypot(this.vx[m], this.vy[m]), s2 = Math.hypot(this.vx[p], this.vy[p]);
+          if (s1 > this.vmax) this.vmax = s1; if (s2 > this.vmax) this.vmax = s2;
+          if (m === 0 || p === 0) this.trail.push({ x: this.x[0], y: this.y[0], t: tm, k: 1 });
+        }
+        const list = [m, p];
+        for (let k = 0; k < N; k++) if (k !== m && k !== p && (ep[k] === m || ep[k] === p)) list.push(k);
+        for (const k of list){ et[k] = Infinity; ep[k] = -3; }
+        for (const k of list) this.predict(k);
+      } else {
+        if (p === -4) this.horizons++;
+        et[m] = Infinity; ep[m] = -3; this.predict(m);
+      }
+      if (++guard > 5e7){ this.drift(T - this.t); this.t = T; return; }
+    }
+  }
+  /* kinetic temperature (2D): T = (1/(2N)) Σ |v_i - ū|^2 */
+  temperature(){
+    const N = this.N; let mx = 0, my = 0;
+    for (let i = 0; i < N; i++){ mx += this.vx[i]; my += this.vy[i]; }
+    mx /= N; my /= N;
+    let s = 0; for (let i = 0; i < N; i++) s += (this.vx[i] - mx) ** 2 + (this.vy[i] - my) ** 2;
+    return s / (2 * N);
+  }
+  record(){ this.updateVmax(); }
+  prune(L){
+    if (!isFinite(L)) return;
+    const cut = this.t - L - 1e-9, tr = this.trail;
+    let k = 0; while (k + 1 < tr.length && tr[k + 1].t < cut) k++;
+    if (k > 0) tr.splice(0, k);
+  }
+}
+
+/* Kinetic theory for hard disks at temperature T (2D, unit masses):
+   packing fraction phi = N pi d^2 / (4|Λ|); contact value chi = (1 - 7phi/16)/(1 - phi)^2 (Henderson);
+   collision frequency nu = 2 n d <|v - v*|> chi with <|v - v*|> = sqrt(pi T);
+   mean free path lambda = <|v|>/nu with <|v|> = sqrt(pi T / 2). */
+function theory(N, d, T){
+  if (d <= 0) return { nu: 0, lam: Infinity, phi: 0, chi: 1 };
+  const n = N, phi = N * Math.PI * d * d / 4;
+  const chi = (1 - 7 * phi / 16) / ((1 - phi) * (1 - phi));
+  const nu = 2 * n * d * Math.sqrt(Math.PI * T) * chi;
+  const lam = Math.sqrt(Math.PI * T / 2) / nu;
+  return { nu, lam, phi, chi };
+}
+
+/* ------------------------------------------------------------------ config */
+const Q = new URLSearchParams(location.search);
+const prefersReduced = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const num = (k, def, lo, hi) => { const v = parseFloat(Q.get(k)); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def; };
+const flag = (k, def) => { const v = Q.get(k); if (v === null) return def; return !/^(0|false|no|off)$/i.test(v); };
+function parseNums(s, lo, hi){
+  if (s === null || s === undefined) return null;
+  const a = String(s).split(/[,;\s]+/).filter(Boolean).map(Number).filter(v => Number.isFinite(v) && v > lo && v < hi);
+  return a.length ? a.slice(0, 4).sort((x, y) => x - y) : null;
+}
+function parseTrail(s, def){
+  if (s === null || s === undefined) return def;
+  if (/^(all|inf|full|whole)$/i.test(s)) return Infinity;
+  const v = parseFloat(s); return Number.isFinite(v) && v >= 0 ? v : def;
+}
+const DEF = { N: 200, phi: [0.2, 2, 20], seed: 3, speed: 0.5, tmax: 12, trail: 3 };
+const cfg = {
+  N: Math.round(num('N', DEF.N, 10, 1000)),
+  phi: parseNums(Q.get('phi'), 0, 45) || DEF.phi.slice(),
+  d: parseNums(Q.get('d'), -1e-12, 0.5),
+  seed: Math.round(num('seed', DEF.seed, 0, 2147483647)),
+  speed: num('speed', DEF.speed, 0.005, 50),
+  tmax: num('tmax', DEF.tmax, 0.1, 1e5),
+  loop: flag('loop', true),
+  trail: parseTrail(Q.get('trail'), DEF.trail),
+  title: Q.has('title') ? Q.get('title') : '1',
+  controls: flag('controls', true),
+  autoplay: Q.has('autoplay') ? flag('autoplay', true) : !prefersReduced,
+  theme: /^(light|dark)$/.test(Q.get('theme') || '') ? Q.get('theme') : 'auto',
+  scale: num('scale', 1, 0.4, 4),
+  font: Q.get('font') === 'latex' ? 'latex' : 'system',
+  bg: Q.get('bg'),
+  record: flag('record', false),
+  dpr: num('dpr', 0, 0, 4),
+  hold: num('hold', 1.5, 0, 60)
+};
+if (cfg.theme !== 'auto') document.documentElement.setAttribute('data-theme', cfg.theme);
+if (cfg.bg === 'transparent') document.body.classList.add('transparent');
+const dOfPhi = (N, phiPct) => Math.sqrt(4 * (phiPct / 100) / (N * Math.PI));
+function cases(){
+  if (cfg.d) return cfg.d.map(d => ({ d, phi: null }));
+  return cfg.phi.map(f => ({ d: dOfPhi(cfg.N, f), phi: f }));
+}
+
+/* ------------------------------------------------------------------ colours + fonts */
+const RAMP_L = ['#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95', '#104281'];
+const RAMP_D = ['#1c5cab', '#256abf', '#2a78d6', '#3987e5', '#5598e7', '#6da7ec', '#86b6ef', '#9ec5f4'];
+let C = {}, FONT = 'sans-serif', MATHF = 'serif';
+function isDark(){
+  if (cfg.theme === 'dark') return true;
+  if (cfg.theme === 'light') return false;
+  return !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+}
+function seriesColors(k, dark){
+  if (k === 1) return [dark ? '#5598e7' : '#2a78d6'];
+  if (k === 3) return dark ? ['#1c5cab', '#3987e5', '#9ec5f4'] : ['#86b6ef', '#2a78d6', '#104281'];
+  const R = dark ? RAMP_D : RAMP_L;
+  return Array.from({ length: k }, (_, i) => R[Math.round(i * (R.length - 1) / (k - 1))]);
+}
+function readColors(){
+  const cs = getComputedStyle(document.documentElement);
+  const g = n => cs.getPropertyValue(n).trim();
+  C = { bg: g('--bg'), panel: g('--panel'), ink: g('--ink'), ink2: g('--ink2'), muted: g('--muted'),
+        grid: g('--grid'), axis: g('--axis'), disk: g('--disk'), tag: g('--tag'), ref: g('--ref') };
+  if (cfg.bg) C.bg = cfg.bg;
+  C.series = seriesColors(cases().length, isDark());
+  C.tagFill = mix(C.panel, C.tag, 0.3);
+  if (cfg.font === 'latex'){ FONT = '"Latin Modern Sans", "LM Sans 10", sans-serif'; MATHF = '"Latin Modern Math", serif'; }
+  else { FONT = g('--font') || 'sans-serif'; MATHF = FONT; }
+}
+function hex2rgb(h){ h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function mix(a, b, f){ const A = hex2rgb(a), B = hex2rgb(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * f).toString(16).padStart(2, '0')).join(''); }
+
+/* rich text runs: strings or {t, m (math italic), s (symbol from math font), w (weight), c (colour), sub, sup} */
+const MI = { 'ε': '\u{1D700}', 'φ': '\u{1D711}', 'λ': '\u{1D706}', 'N': '\u{1D441}', 't': '\u{1D461}', 'ν': '\u{1D708}',
+             'P': '\u{1D443}', 'T': '\u{1D447}', 'v': '\u{1D463}', 'x': '\u{1D465}', 'y': '\u{1D466}', 'z': '\u{1D467}',
+             'p': '\u{1D45D}', 'n': '\u{1D45B}', 'Λ': '\u{1D6EC}', 'k': '\u{1D458}', 'τ': '\u{1D70F}', 'ω': '\u{1D714}', 'χ': '\u{1D712}' };
+const M = s => ({ t: s, m: true });
+const SY = s => ({ t: s, s: true });
+const SUB = (s, math) => ({ t: s, sub: true, m: !!math });
+const SUP = s => ({ t: s, sup: true });
+const runsOf = x => (Array.isArray(x) ? x.flat(3) : [x]).map(r => typeof r === 'string' ? { t: r } : r);
+const mathStr = s => cfg.font === 'latex' ? Array.from(s).map(ch => MI[ch] || ch).join('') : s;
+const rsize = (r, size) => (r.sub || r.sup) ? size * 0.7 : size;
+const rshift = (r, size) => r.sub ? size * 0.2 : r.sup ? -size * 0.38 : 0;
+function fontStr(size, weight, r){
+  if (r.s) return cfg.font === 'latex' ? `${size}px ${MATHF}` : `${weight} ${size}px ${FONT}`;
+  if (r.m) return cfg.font === 'latex' ? `${size}px ${MATHF}` : `italic ${weight} ${size}px ${FONT}`;
+  return `${weight} ${size}px ${FONT}`;
+}
+const mctx = document.createElement('canvas').getContext('2d');
+function measure(runs, size, weight){
+  let w = 0;
+  for (const r of runsOf(runs)){ const sz = rsize(r, size); mctx.font = fontStr(sz, r.w || weight || 400, r); w += mctx.measureText(r.m ? mathStr(r.t) : r.t).width; }
+  return w;
+}
+
+/* ------------------------------------------------------------------ renderers (canvas + SVG) */
+const TAU = Math.PI * 2;
+function CanvasR(ctx){
+  return {
+    clear(W, H, bg){ ctx.clearRect(0, 0, W, H); if (bg && bg !== 'transparent'){ ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); } },
+    rect(x, y, w, h, fill, stroke, lw, dash){
+      if (fill){ ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); }
+      if (stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.setLineDash(dash || []); ctx.strokeRect(x, y, w, h); ctx.setLineDash([]); }
+    },
+    rrect(x, y, w, h, r, fill){ ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); ctx.fill(); },
+    clip(x, y, w, h){ ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); },
+    unclip(){ ctx.restore(); },
+    disc(x, y, r, fill, stroke, lw){
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU);
+      if (fill){ ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke && lw){ ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+    },
+    disks(a, fill, alpha){
+      if (!a.length) return;
+      ctx.globalAlpha = alpha == null ? 1 : alpha; ctx.fillStyle = fill; ctx.beginPath();
+      for (let i = 0; i < a.length; i += 3){ ctx.moveTo(a[i] + a[i + 2], a[i + 1]); ctx.arc(a[i], a[i + 1], a[i + 2], 0, TAU); }
+      ctx.fill(); ctx.globalAlpha = 1;
+    },
+    circle(x, y, r, fill, stroke, lw, alpha){
+      ctx.globalAlpha = alpha == null ? 1 : alpha; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU);
+      if (stroke && lw){ ctx.strokeStyle = stroke; ctx.lineWidth = lw * 2; ctx.stroke(); }
+      if (fill){ ctx.fillStyle = fill; ctx.fill(); }
+      ctx.globalAlpha = 1;
+    },
+    poly(p, stroke, lw, alpha, dash){
+      if (p.length < 4) return;
+      ctx.globalAlpha = alpha == null ? 1 : alpha; ctx.strokeStyle = stroke; ctx.lineWidth = lw;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.setLineDash(dash || []);
+      ctx.beginPath(); ctx.moveTo(p[0], p[1]); for (let i = 2; i < p.length; i += 2) ctx.lineTo(p[i], p[i + 1]);
+      ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    },
+    segs(s, stroke, lw, alpha){
+      if (!s.length) return;
+      ctx.globalAlpha = alpha == null ? 1 : alpha; ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.lineCap = 'round';
+      ctx.beginPath(); for (let i = 0; i < s.length; i += 4){ ctx.moveTo(s[i], s[i + 1]); ctx.lineTo(s[i + 2], s[i + 3]); }
+      ctx.stroke(); ctx.globalAlpha = 1;
+    },
+    text(runs, x, y, o){
+      const rs = runsOf(runs), size = o.size, weight = o.weight || 400;
+      const w = (o.align === 'right' || o.align === 'center') ? measure(rs, size, weight) : 0;
+      let cx = o.align === 'right' ? x - w : o.align === 'center' ? x - w / 2 : x;
+      ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+      for (const r of rs){
+        const sz = rsize(r, size);
+        ctx.font = fontStr(sz, r.w || weight, r); ctx.fillStyle = r.c || o.color;
+        const s = r.m ? mathStr(r.t) : r.t; ctx.fillText(s, cx, y + rshift(r, size)); cx += ctx.measureText(s).width;
+      }
+    }
+  };
+}
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function SvgR(){
+  const out = [], f = n => Math.round(n * 100) / 100;
+  const op = (name, a) => (a != null && a < 1) ? ` ${name}="${f(a)}"` : '';
+  let clipN = 0;
+  return {
+    out,
+    clear(W, H, bg){ if (bg && bg !== 'transparent') out.push(`<rect width="${f(W)}" height="${f(H)}" fill="${bg}"/>`); },
+    rect(x, y, w, h, fill, stroke, lw, dash){ out.push(`<rect x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" fill="${fill || 'none'}"${stroke ? ` stroke="${stroke}" stroke-width="${lw || 1}"` : ''}${dash ? ` stroke-dasharray="${dash.map(f).join(' ')}"` : ''}/>`); },
+    rrect(x, y, w, h, r, fill){ out.push(`<rect x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(r)}" fill="${fill}"/>`); },
+    clip(x, y, w, h){ const id = 'cp' + (++clipN); out.push(`<clipPath id="${id}"><rect x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}"/></clipPath><g clip-path="url(#${id})">`); },
+    unclip(){ out.push('</g>'); },
+    disc(x, y, r, fill, stroke, lw){ out.push(`<circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="${fill || 'none'}"${stroke && lw ? ` stroke="${stroke}" stroke-width="${f(lw)}"` : ''}/>`); },
+    disks(a, fill, alpha){
+      if (!a.length) return;
+      out.push(`<g fill="${fill}"${op('fill-opacity', alpha)}>`);
+      for (let i = 0; i < a.length; i += 3) out.push(`<circle cx="${f(a[i])}" cy="${f(a[i + 1])}" r="${f(a[i + 2])}"/>`);
+      out.push('</g>');
+    },
+    circle(x, y, r, fill, stroke, lw, alpha){
+      if (stroke && lw) out.push(`<g${op('opacity', alpha)}><circle cx="${f(x)}" cy="${f(y)}" r="${f(r + lw)}" fill="${stroke}"/><circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="${fill}"/></g>`);
+      else out.push(`<circle cx="${f(x)}" cy="${f(y)}" r="${f(r)}" fill="${fill || 'none'}"${op('opacity', alpha)}/>`);
+    },
+    poly(p, stroke, lw, alpha, dash){
+      if (p.length < 4) return;
+      let pts = ''; for (let i = 0; i < p.length; i += 2) pts += `${f(p[i])},${f(p[i + 1])} `;
+      out.push(`<polyline points="${pts.trim()}" fill="none" stroke="${stroke}" stroke-width="${f(lw)}" stroke-linecap="round" stroke-linejoin="round"${op('stroke-opacity', alpha)}${dash ? ` stroke-dasharray="${dash.map(f).join(' ')}"` : ''}/>`);
+    },
+    segs(s, stroke, lw, alpha){
+      if (!s.length) return;
+      let d = ''; for (let i = 0; i < s.length; i += 4) d += `M${f(s[i])} ${f(s[i + 1])}L${f(s[i + 2])} ${f(s[i + 3])}`;
+      out.push(`<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${f(lw)}" stroke-linecap="round"${op('stroke-opacity', alpha)}/>`);
+    },
+    text(runs, x, y, o){
+      const rs = runsOf(runs), size = o.size, weight = o.weight || 400;
+      const w = (o.align === 'right' || o.align === 'center') ? measure(rs, size, weight) : 0;
+      const cx = o.align === 'right' ? x - w : o.align === 'center' ? x - w / 2 : x;
+      let s = `<text x="${f(cx)}" y="${f(y)}" font-size="${f(size)}" font-family="${esc(FONT)}" font-weight="${weight}" fill="${o.color}" xml:space="preserve">`;
+      let shift = 0;
+      for (const r of rs){
+        const str = esc(r.m ? mathStr(r.t) : r.t);
+        const sz = rsize(r, size), sh = rshift(r, size);
+        const latexMath = (r.m || r.s) && cfg.font === 'latex';
+        let attrs = (latexMath ? ` font-family="${esc(MATHF)}" font-weight="400"` : '') + (r.m && !latexMath ? ' font-style="italic"' : '') +
+                    (r.w ? ` font-weight="${r.w}"` : '') + (r.c ? ` fill="${r.c}"` : '') + (sz !== size ? ` font-size="${f(sz)}"` : '');
+        if (sh !== shift){ attrs += ` dy="${f(sh - shift)}"`; shift = sh; }
+        s += attrs ? `<tspan${attrs}>${str}</tspan>` : str;
+      }
+      out.push(s + '</text>');
+    }
+  };
+}
+
+/* ------------------------------------------------------------------ state */
+let init = null, sims = [], th = [], cs = [], errMsg = null;
+let running = false, visible = true, holdLeft = 0, lastNow = 0;
+let L = null, W = 0, H = 0, dpr = 1;
+const stage = document.getElementById('stage'), canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d');
+
+function build(){
+  errMsg = null;
+  cs = cases();
+  const dmax = Math.max(...cs.map(c => c.d));
+  try { init = makeInit(cfg.N, dmax, cfg.seed); }
+  catch (e){ errMsg = e.message; sims = []; th = []; return; }
+  sims = cs.map(c => new Sim(init, c.d));
+  const T = sims[0].temperature();                  /* (1/2N) Σ|v_i − ū|², = 1/2 here */
+  th = cs.map(c => theory(cfg.N, c.d, T));
+  holdLeft = 0;
+}
+function niceStep(range, target){
+  const raw = range / Math.max(1, target), p = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / p;
+  return (r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10) * p;
+}
+function niceCeil(v){ if (v <= 0) return 1; const s = niceStep(v, 5); return Math.ceil(v / s - 1e-9) * s; }
+
+/* ------------------------------------------------------------------ layout */
+function computeLayout(W, H){
+  const k = Math.max(1, cs.length);
+  const fs = Math.max(10, Math.min(22, 0.0115 * Math.min(W, 1.9 * H))) * cfg.scale;
+  const m = Math.max(8, fs * 0.9);
+  const headH = fs * 2.1;
+  const above = fs * 1.9;
+  const below = fs * 1.9;
+  const gx = fs * 1.6, gy = fs * 1.0;
+  let best = null;
+  for (let cols = 1; cols <= k; cols++){
+    const rows = Math.ceil(k / cols);
+    const sW = (W - 2 * m - (cols - 1) * gx) / cols;
+    const sH = (H - 2 * m - headH - rows * (above + below) - (rows - 1) * gy) / rows;
+    const s = Math.floor(Math.min(sW, sH));
+    if (!best || s > best.s) best = { s, cols, rows };
+  }
+  const s = Math.max(20, best.s), cols = best.cols, rows = best.rows;
+  const gridW = cols * s + (cols - 1) * gx;
+  const contentH = headH + rows * (above + s + below) + (rows - 1) * gy;
+  const x0 = Math.round((W - gridW) / 2), y0 = Math.round(Math.max(m, (H - contentH) / 2));
+  const panels = [];
+  for (let i = 0; i < k; i++){
+    const r = Math.floor(i / cols), c = i % cols;
+    const inRow = Math.min(cols, k - r * cols);
+    const rowOff = (cols - inRow) * (s + gx) / 2;
+    panels.push({ x: Math.round(x0 + rowOff + c * (s + gx)) + 0.5, y: Math.round(y0 + headH + r * (above + s + below + gy) + above) + 0.5, s });
+  }
+  return { W, H, fs, k, s, cols, rows, panels, x0, y0, gridW, headH };
+}
+
+/* ------------------------------------------------------------------ formatting */
+const fmtInt = n => Math.round(n).toLocaleString('en-US');
+const fmtD = d => d === 0 ? '0' : String(+d.toPrecision(3));
+const fmtPct = p => { const v = p * 100; if (v === 0) return '0%'; return (v < 0.01 ? String(+v.toPrecision(2)) : v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : v.toFixed(0)) + '%'; };
+const fmtLam = l => !isFinite(l) ? '∞' : l >= 10 ? l.toFixed(0) : l >= 1 ? l.toFixed(1) : l >= 0.1 ? l.toFixed(2) : String(+l.toPrecision(2));
+const fmtP = v => v >= 1000 ? v.toFixed(0) : v.toFixed(1);
+const fmtPhi = f => (f >= 10 ? String(+f.toFixed(1)) : f >= 1 ? String(+f.toFixed(2)) : String(+f.toPrecision(2))) + '%';
+function caseRuns(c){
+  if (c.phi === null) return [M('ε'), ' = ' + fmtD(c.d)];
+  return [M('φ'), ' = ' + fmtPhi(c.phi)];
+}
+
+function titlePlans(){
+  const t = cfg.title;
+  if (/^(0|false|no|off)$/i.test(t || '')) return [];
+  if (!(t === null || t === '1' || t === 'true')) return [[t]];
+  return [
+    [M('N'), ` = ${cfg.N} hard disks in a periodic square · same initial positions, all speeds |`, M('v'), '| = 1'],
+    [M('N'), ` = ${cfg.N} hard disks in a periodic square`],
+    [M('N'), ` = ${cfg.N} hard disks`]
+  ];
+}
+
+/* ------------------------------------------------------------------ drawing */
+function drawScene(R){
+  const fs = L.fs;
+  R.clear(W, H, C.bg);
+  if (errMsg){ R.text(errMsg, W / 2, H / 2, { size: Math.max(12, fs), color: C.ink2, align: 'center' }); return; }
+  drawHeader(R);
+  sims.forEach((s, i) => drawPanel(R, L.panels[i], s, i));
+}
+
+function drawHeader(R){
+  const fs = L.fs, y = L.y0 + fs * 1.25, left = L.x0, right = L.x0 + L.gridW;
+  const t = sims.length ? sims[0].t : 0;
+  const tRuns = [M('t'), ' = ' + t.toFixed(2)];
+  const tW = measure(tRuns, fs * 1.0, 600);
+  const avail = right - left - tW - fs * 1.5;
+  const tsz = fs * 1.02, kfs = fs * 0.88, gap = fs * 1.4, iconW = fs * 2.1;
+  const items = [
+    { icon: 'tag', long: 'tagged particle and its path · dots mark its collisions', short: 'tagged particle and its path' }
+  ];
+  const wOf = lab => iconW + measure(lab, kfs, 400);
+  const tps = titlePlans();
+  const plans = [];
+  const keyVariants = [[items[0].long], [items[0].short], []];
+  for (const kv of keyVariants){
+    for (const tp of tps) plans.push({ tp, kv });
+    if (!tps.length || kv.length <= 1) plans.push({ tp: null, kv });
+  }
+  let plan = { tp: null, kv: [] };
+  for (const pl of plans){
+    const w = (pl.tp ? measure(pl.tp, tsz, 600) + gap : 0) + pl.kv.reduce((a, lab) => a + wOf(lab), 0) + gap * Math.max(0, pl.kv.length - 1);
+    if (w <= avail){ plan = pl; break; }
+  }
+  let x = left;
+  if (plan.tp){ R.text(plan.tp, x, y, { size: tsz, weight: 600, color: C.ink }); x += measure(plan.tp, tsz, 600) + gap; }
+  plan.kv.forEach((lab, i) => {
+    const cy = y - kfs * 0.34;
+    if (i === 0){
+      const lw = Math.max(1.5, fs * 0.1);
+      R.poly([x, cy, x + fs * 1.5, cy], C.tag, lw, 0.9);
+      R.circle(x + fs * 0.75, cy, Math.max(2, fs * 0.17), C.tag, C.bg, 1);
+      R.circle(x + fs * 1.5, cy, Math.max(3, fs * 0.3), C.tag, C.bg, 1.5);
+    } else {
+      const rr = fs * 0.42;
+      R.disc(x + rr, cy, rr, mix(C.panel, C.disk, 0.35), C.panel, 1);
+      R.disc(x + fs * 1.65 - rr, cy, rr, C.disk, C.panel, 1);
+    }
+    R.text(lab, x + iconW, y, { size: kfs, color: C.ink2 });
+    x += wOf(lab) + gap;
+  });
+  R.text(tRuns, right, y, { size: fs * 1.0, weight: 600, color: C.ink, align: 'right' });
+}
+
+function drawPanel(R, P, s, i){
+  const fs = L.fs, S = P.s, X0 = P.x, Y0 = P.y;
+  const d = s.d, T = th[i], c = cs[i];
+  /* title row */
+  const by = Y0 - fs * 0.62;
+  let tx = X0;
+  const tRuns = caseRuns(c), tsz = fs * 1.08;
+  R.text(tRuns, tx, by, { size: tsz, weight: 600, color: C.ink });
+  const usedL = tx - X0 + measure(tRuns, tsz, 600) + fs * 0.8;
+  const rsz = fs * 0.88;
+  const r1 = c.phi === null ? [M('φ'), ' = ' + fmtPct(T.phi)] : [M('ε'), ' = ' + fmtD(d)];
+  if (measure(r1, rsz, 400) + usedL <= S) R.text(r1, X0 + S, by, { size: rsz, color: C.ink2, align: 'right' });
+
+  /* box (dashed border = periodic) */
+  R.rect(X0, Y0, S, S, C.panel, null);
+  R.clip(X0, Y0, S, S);
+  const rad = d > 0 ? Math.max(0.9, d / 2 * S) : Math.max(1.1, fs * 0.07);
+  const rr = rad / S;
+  /* tiny disks lose apparent contrast to anti-aliasing: darken them a little */
+  const boost = Math.max(0, Math.min(1, (3 - rad) / 2)) * 0.55;
+  const dcol = boost > 0 ? mix(C.disk, C.ink2, boost) : C.disk;
+  const base = [];
+  for (let j = 1; j < s.N; j++){
+    const u = s.x[j] - Math.floor(s.x[j]), v = s.y[j] - Math.floor(s.y[j]);
+    forImages(u, v, rr, (a, b) => base.push(X0 + a * S, Y0 + (1 - b) * S, rad));
+  }
+  R.disks(base, dcol);
+  drawTrail(R, s, P, rad);
+  R.unclip();
+  R.rect(X0, Y0, S, S, null, C.axis, 1, [Math.max(3, fs * 0.28), Math.max(3, fs * 0.22)]);
+
+  /* collisions + mean free path */
+  const ly = Y0 + S + fs * 1.4, lsz = fs * 0.9;
+  const cL = v => [{ t: v, w: 600, c: C.ink }, ' collisions'];
+  const cR = v => ['mean free path ', M('λ'), ' ', SY('≈'), ' ' + v];
+  const cR2 = v => [M('λ'), ' ', SY('≈'), ' ' + v];
+  const wl = measure(cL('88,888'), lsz, 400), wph = '0.0888';
+  R.text(cL(fmtInt(s.coll)), X0, ly, { size: lsz, color: C.ink2 });
+  if (wl + measure(cR(wph), lsz, 400) + fs <= S) R.text(cR(fmtLam(T.lam)), X0 + S, ly, { size: lsz, color: C.ink2, align: 'right' });
+  else if (wl + measure(cR2(wph), lsz, 400) + fs <= S) R.text(cR2(fmtLam(T.lam)), X0 + S, ly, { size: lsz, color: C.ink2, align: 'right' });
+}
+
+/* call fn for the periodic copies of a disk centred at (u, v) in [0,1)^2 that touch the box */
+function forImages(u, v, r, fn){
+  const ox = [0], oy = [0];
+  if (u - r < 0) ox.push(1); if (u + r > 1) ox.push(-1);
+  if (v - r < 0) oy.push(1); if (v + r > 1) oy.push(-1);
+  for (const a of ox) for (const b of oy) fn(u + a, v + b);
+}
+
+/* split a straight segment (unwrapped coordinates) into pieces inside the unit square */
+function wrapSeg(ax, ay, bx, by, emit){
+  const ox = Math.floor(ax), oy = Math.floor(ay);
+  ax -= ox; bx -= ox; ay -= oy; by -= oy;
+  for (let g = 0; g < 64; g++){
+    const dx = bx - ax, dy = by - ay;
+    const sx = dx > 0 ? (1 - ax) / dx : dx < 0 ? -ax / dx : Infinity;
+    const sy = dy > 0 ? (1 - ay) / dy : dy < 0 ? -ay / dy : Infinity;
+    const s = Math.min(1, sx, sy);
+    emit(ax, ay, ax + dx * s, ay + dy * s);
+    if (s >= 1) return;
+    ax += dx * s; ay += dy * s;
+    if (sx <= s + 1e-12){ const sh = dx > 0 ? 1 : -1; ax -= sh; bx -= sh; }
+    if (sy <= s + 1e-12){ const sh = dy > 0 ? 1 : -1; ay -= sh; by -= sh; }
+  }
+}
+
+function drawTrail(R, s, P, rad){
+  const fs = L.fs, S = P.s;
+  const X = u => P.x + u * S, Y = v => P.y + (1 - v) * S;
+  const Lt = cfg.trail;
+  const lw = Math.max(1.3, fs * 0.11), dr = Math.max(1.8, fs * 0.16);
+  const u0 = s.x[0] - Math.floor(s.x[0]), v0 = s.y[0] - Math.floor(s.y[0]);
+  const big = rad >= fs * 0.9;
+  /* the tagged sphere itself (its true size; a light fill when large so the path stays visible) */
+  if (big) forImages(u0, v0, rad / S, (a, b) => R.disc(X(a), Y(b), rad, C.tagFill, C.tag, Math.max(1.2, fs * 0.08)));
+  if (Lt > 0){
+    const pts = s.trail.concat([{ x: s.x[0], y: s.y[0], t: s.t, k: -1 }]);
+    const wrapDot = (x, y) => [X(x - Math.floor(x)), Y(y - Math.floor(y))];
+    if (!isFinite(Lt)){
+      const segs = [];
+      for (let i = 0; i + 1 < pts.length; i++) wrapSeg(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, (a, b, c2, d2) => segs.push(X(a), Y(b), X(c2), Y(d2)));
+      R.segs(segs, C.tag, lw, 0.85);
+      const dots = []; for (const p of s.trail) if (p.k === 1){ const [a, b] = wrapDot(p.x, p.y); dots.push(a, b, dr); }
+      R.disks(dots, C.tag, 0.95);
+    } else {
+      const t0 = s.t - Lt, NL = 14, buckets = Array.from({ length: NL }, () => []);
+      const piece = Lt / 40;
+      const lev = tm => { const a = 1 - (s.t - tm) / Lt; return Math.max(0, Math.min(NL - 1, Math.floor(a * NL))); };
+      for (let i = 0; i + 1 < pts.length; i++){
+        const a = pts[i], b = pts[i + 1];
+        if (b.t <= t0) continue;
+        let ta = a.t, ax = a.x, ay = a.y;
+        if (ta < t0 && b.t > ta){ const f = (t0 - ta) / (b.t - ta); ax += (b.x - ax) * f; ay += (b.y - ay) * f; ta = t0; }
+        const dur = b.t - ta, n = Math.max(1, Math.ceil(dur / piece));
+        for (let j = 0; j < n; j++){
+          const f0 = j / n, f1 = (j + 1) / n, tm = ta + dur * (f0 + f1) / 2, bk = buckets[lev(tm)];
+          wrapSeg(ax + (b.x - ax) * f0, ay + (b.y - ay) * f0, ax + (b.x - ax) * f1, ay + (b.y - ay) * f1, (p1, q1, p2, q2) => bk.push(X(p1), Y(q1), X(p2), Y(q2)));
+        }
+      }
+      for (let q = 0; q < NL; q++){ const al = Math.pow((q + 0.5) / NL, 1.25) * 0.95; R.segs(buckets[q], C.tag, lw, al); }
+      const dl = Array.from({ length: NL }, () => []);
+      for (const p of s.trail) if (p.k === 1 && p.t > t0){ const [a, b] = wrapDot(p.x, p.y); dl[lev(p.t)].push(a, b, dr); }
+      for (let q = 0; q < NL; q++) R.disks(dl[q], C.tag, Math.pow((q + 0.5) / NL, 1.25));
+    }
+  }
+  const cr = big ? Math.max(2.5, fs * 0.2) : Math.max(rad, fs * 0.3);
+  forImages(u0, v0, cr / S, (a, b) => R.circle(X(a), Y(b), cr, C.tag, C.panel, Math.max(1, fs * 0.07)));
+}
+
+/* ------------------------------------------------------------------ canvas plumbing */
+function resize(){
+  const r = stage.getBoundingClientRect();
+  W = Math.max(50, Math.round(r.width)); H = Math.max(50, Math.round(r.height));
+  dpr = cfg.dpr || Math.min(3, window.devicePixelRatio || 1);
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  L = computeLayout(W, H);
+  render();
+}
+function render(){
+  if (!L) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawScene(CanvasR(ctx));
+}
+function buildSvg(){
+  const R = SvgR();
+  drawScene(R);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">\n${R.out.join('\n')}\n</svg>\n`;
+}
+
+/* ------------------------------------------------------------------ time stepping */
+function stepAll(T){ for (const s of sims){ s.advanceTo(T); s.record(); s.prune(cfg.trail); } }
+function advance(dts, dtw){
+  if (!sims.length) return;
+  const t = sims[0].t;
+  if (t >= cfg.tmax - 1e-12){
+    if (cfg.loop){ if (holdLeft > 0){ holdLeft -= dtw; return; } reset(); return; }
+    setRunning(false); return;
+  }
+  const T = Math.min(cfg.tmax, t + dts);
+  stepAll(T);
+  if (T >= cfg.tmax) holdLeft = cfg.hold;
+}
+function loop(now){
+  if (!running) return;
+  const dtw = Math.min(0.1, Math.max(0, (now - lastNow) / 1000)); lastNow = now;
+  if (visible && !document.hidden){ advance(dtw * cfg.speed, dtw); render(); }
+  requestAnimationFrame(loop);
+}
+const ICON_PAUSE = '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3" width="3" height="10" rx="0.8"/><rect x="9.5" y="3" width="3" height="10" rx="0.8"/></svg>';
+const ICON_PLAY = '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8.2-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5z"/></svg>';
+function setRunning(on){
+  running = on;
+  const b = document.getElementById('bPlay');
+  b.innerHTML = on ? ICON_PAUSE + ' Pause' : ICON_PLAY + ' Play';
+  b.setAttribute('aria-label', on ? 'Pause' : 'Play');
+  if (on && !cfg.record){ lastNow = performance.now(); requestAnimationFrame(loop); }
+}
+function reset(){ build(); render(); }
+
+/* ------------------------------------------------------------------ controls */
+const $ = id => document.getElementById(id);
+function currentParams(){
+  const p = new URLSearchParams();
+  if (cfg.N !== DEF.N) p.set('N', cfg.N);
+  if (cfg.d) p.set('d', cfg.d.join(','));
+  else if (cfg.phi.join(',') !== DEF.phi.join(',')) p.set('phi', cfg.phi.join(','));
+  if (cfg.seed !== DEF.seed) p.set('seed', cfg.seed);
+  if (cfg.speed !== DEF.speed) p.set('speed', cfg.speed);
+  if (cfg.tmax !== DEF.tmax) p.set('tmax', cfg.tmax);
+  if (!cfg.loop) p.set('loop', 0);
+  if (cfg.trail !== DEF.trail) p.set('trail', isFinite(cfg.trail) ? cfg.trail : 'all');
+  if (cfg.title !== '1') p.set('title', cfg.title);
+  if (cfg.theme !== 'auto') p.set('theme', cfg.theme);
+  if (cfg.scale !== 1) p.set('scale', cfg.scale);
+  return p.toString().replace(/%2C/gi, ',');
+}
+function fillSettings(){
+  $('iN').value = cfg.N; $('iPhi').value = cfg.phi.join(', '); $('iSeed').value = cfg.seed; $('iTmax').value = cfg.tmax;
+  $('iTrail').value = isFinite(cfg.trail) ? (['0', '1', '3', '6'].includes(String(cfg.trail)) ? String(cfg.trail) : '3') : 'all';
+  $('iLoop').checked = cfg.loop;
+  $('eSettings').textContent = '';
+}
+function applySettings(){
+  const raw = String($('iPhi').value).split(/[,;\s]+/).filter(Boolean).map(Number);
+  const okPhi = raw.length >= 1 && raw.length <= 4 && raw.every(v => Number.isFinite(v) && v > 0 && v <= 45);
+  const N = Math.round(parseFloat($('iN').value)), ph = okPhi ? raw.slice().sort((x, y) => x - y) : null, seed = Math.round(parseFloat($('iSeed').value));
+  const tmax = parseFloat($('iTmax').value);
+  const err = !(N >= 10 && N <= 1000) ? 'N must be between 10 and 1000.' : !ph ? 'Give 1 to 4 packing fractions between 0 and 45 (%).' : !(seed >= 0) ? 'Seed must be a non-negative integer.'
+            : !(tmax >= 0.5) ? 'Loop length must be at least 0.5.' : '';
+  if (err){ $('eSettings').textContent = err; return false; }
+  const dmax = dOfPhi(N, Math.max(...ph));
+  if (dmax >= 0.5){ $('eSettings').textContent = `Diameter ${fmtD(dmax)} is too large for the box; lower φ or raise N.`; return false; }
+  try { makeInit(N, dmax, seed); } catch (e){ $('eSettings').textContent = e.message; return false; }
+  Object.assign(cfg, { N, phi: ph, d: null, seed, tmax, trail: parseTrail($('iTrail').value, 3), loop: $('iLoop').checked });
+  cs = cases(); readColors(); build(); L = computeLayout(W, H); render();
+  try { const p = currentParams(); history.replaceState(null, '', location.pathname + (p ? '?' + p : '') + location.hash); } catch (e){}
+  if (!running && sims.length) setRunning(true);
+  return true;
+}
+function embedCode(){
+  const q = currentParams();
+  const src = (location.protocol === 'file:' ? 'hard-disks.html' : location.origin + location.pathname) + (q ? '?' + q : '');
+  return `<iframe src="${esc(src)}"\n        title="Hard-disk simulation: effect of particle size"\n        loading="lazy" allowfullscreen\n        style="width:100%;aspect-ratio:12/5;border:0"></iframe>`;
+}
+function togglePop(id, btn){
+  const el = $(id), open = !el.classList.contains('open');
+  document.querySelectorAll('.pop.open').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('#bar [aria-expanded]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+  if (open){ el.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
+  return open;
+}
+function download(name, blob){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function stepOnce(){ if (!running && sims.length){ stepAll(Math.min(cfg.tmax, sims[0].t + 0.05)); render(); } }
+function toggleFull(){
+  const el = document.documentElement;
+  try { if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen(); } catch (e){}
+}
+function wire(){
+  if (!cfg.controls || cfg.record) $('bar').hidden = true;
+  $('sSpeed').value = String(cfg.speed);
+  if ($('sSpeed').value !== String(cfg.speed)){ const o = document.createElement('option'); o.value = o.textContent = String(cfg.speed); $('sSpeed').appendChild(o); $('sSpeed').value = String(cfg.speed); }
+  $('bPlay').onclick = () => { if (sims.length && sims[0].t >= cfg.tmax - 1e-12 && !running) reset(); setRunning(!running); };
+  $('bReset').onclick = () => reset();
+  $('sSpeed').onchange = e => { cfg.speed = parseFloat(e.target.value); };
+  $('bSettings').onclick = e => { if (togglePop('pSettings', e.currentTarget)) fillSettings(); };
+  $('bApply').onclick = () => { if (applySettings()) togglePop('pSettings', $('bSettings')); };
+  $('bRandom').onclick = () => { $('iSeed').value = Math.floor(Math.random() * 1e6); applySettings(); };
+  $('bEmbed').onclick = e => { if (togglePop('pEmbed', e.currentTarget)) $('tEmbed').value = embedCode(); };
+  $('bCopy').onclick = async () => { const t = $('tEmbed'); try { await navigator.clipboard.writeText(t.value); } catch (e){ t.select(); document.execCommand && document.execCommand('copy'); } $('bCopy').textContent = 'Copied'; setTimeout(() => $('bCopy').textContent = 'Copy', 1400); };
+  const stamp = () => sims.length ? sims[0].t.toFixed(2) : '0';
+  $('bSvg').onclick = () => download(`hard-disks-t${stamp()}.svg`, new Blob([buildSvg()], { type: 'image/svg+xml' }));
+  $('bPng').onclick = () => canvas.toBlob(b => b && download(`hard-disks-t${stamp()}.png`, b), 'image/png');
+  $('bFull').onclick = toggleFull;
+  canvas.addEventListener('click', () => { if (!cfg.controls) $('bPlay').click(); });
+  document.addEventListener('keydown', e => {
+    const tg = (e.target && e.target.tagName) || '';
+    if (/INPUT|TEXTAREA|SELECT/.test(tg)) return;
+    if (e.key === ' ' || e.code === 'Space'){ e.preventDefault(); $('bPlay').click(); }
+    else if (e.key === 'r' || e.key === 'R') reset();
+    else if (e.key === 'ArrowRight') stepOnce();
+    else if (e.key === 'f' || e.key === 'F') toggleFull();
+    else if (e.key === 'Escape') document.querySelectorAll('.pop.open').forEach(p => p.classList.remove('open'));
+  });
+  if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es.some(x => x.isIntersecting); }).observe(stage);
+  if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); render(); });
+  new ResizeObserver(() => resize()).observe(stage);
+}
+
+/* ------------------------------------------------------------------ boot */
+cs = cases();
+readColors();
+build();
+wire();
+resize();
+canvas.setAttribute('aria-label', `Animation: ${cfg.N} hard disks in a periodic square, ${cs.length} panels with packing fractions ${cs.map(c => c.phi === null ? 'ε=' + fmtD(c.d) : fmtPhi(c.phi)).join(', ')}, identical initial data with unit speeds. Larger disks collide more often, the tagged particle's path becomes a short-step random walk, while the smallest disks fly almost freely.`);
+setRunning(!cfg.record && cfg.autoplay);
+
+/* scripting / recording hook */
+window.HD = {
+  cfg, get sims(){ return sims; }, get theory(){ return th; }, get layout(){ return L; },
+  seek(T){ /* advance in small steps, like live playback */
+    if (!sims.length) return 0;
+    const target = Math.max(sims[0].t, Math.min(T, cfg.tmax)), h = cfg.tmax / 600;
+    for (let t = sims[0].t + h; t < target - 1e-12; t += h) stepAll(t);
+    stepAll(target); render(); return sims[0].t; },
+  reset, render, png: () => canvas.toDataURL('image/png'), svg: buildSvg, resize,
+  check(){
+    return sims.map(s => {
+      let e = 0, px = 0, py = 0, minGap = Infinity;
+      for (let i = 0; i < s.N; i++){
+        e += s.vx[i] ** 2 + s.vy[i] ** 2; px += s.vx[i]; py += s.vy[i];
+        if (s.d > 0) for (let j = i + 1; j < s.N; j++){
+          let dx = s.x[j] - s.x[i], dy = s.y[j] - s.y[i];
+          dx -= Math.round(dx); dy -= Math.round(dy);
+          const g = Math.sqrt(dx * dx + dy * dy) - s.d; if (g < minGap) minGap = g;
+        }
+      }
+      return { d: s.d, t: s.t, meanV2: e / s.N, momentum: Math.hypot(px, py), minGap, collisions: s.coll, horizons: s.horizons, T: s.temperature() };
+    });
+  },
+  ready: true
+};
+})();
+</script>
+</body>
+</html>
